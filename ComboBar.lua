@@ -32,21 +32,38 @@ local function CreateBorder(holder)
     holder.border = { left = left, right = right, top = top, bottom = bottom }
 end
 
+-- Each bar covers one point of the range, so the client renders it empty below that
+-- point and full at or above it without us reading the count.
+local function CreatePointBar(parent, index)
+    local bar = CreateFrame("StatusBar", nil, parent)
+    bar:SetMinMaxValues(index - 1, index)
+    bar:SetValue(0)
+    return bar
+end
+
 local function CreatePip(index)
-    -- The holder carries the background and border. The StatusBar only receives the
-    -- secret value and nothing anchors to it, so its secret state never spreads into
-    -- the rest of the layout.
+    -- The holder carries the background and border. The StatusBars only receive the
+    -- secret value, and the only thing anchored to one is the clip frame below, so
+    -- their secret state never spreads into the rest of the layout.
     local holder = CreateFrame("Frame", nil, frame)
     holder.bg = holder:CreateTexture(nil, "BACKGROUND")
     holder.bg:SetAllPoints()
     CreateBorder(holder)
 
-    -- Each bar covers one point of the range, so the client renders it empty below
-    -- that point and full at or above it without us reading the count.
-    local bar = CreateFrame("StatusBar", nil, holder)
-    bar:SetMinMaxValues(index - 1, index)
-    bar:SetValue(0)
-    holder.bar = bar
+    -- The count can't be compared, so a gain can't be told from a spend to choose the
+    -- interpolation. Instead every value goes to two bars: an invisible one that eases,
+    -- and the visible one that snaps, drawn only inside the eased bar's fill. What shows
+    -- is the smaller of the two, so a gain eases in and a spend empties at once.
+    local reveal = CreatePointBar(holder, index)
+    reveal:SetStatusBarTexture(ns.textures.flat.path)
+    reveal:SetStatusBarColor(0, 0, 0, 0)
+
+    local clip = CreateFrame("Frame", nil, holder)
+    clip:SetClipsChildren(true)
+    clip:SetAllPoints(reveal:GetStatusBarTexture())
+
+    holder.reveal = reveal
+    holder.bar = CreatePointBar(clip, index)
 
     return holder
 end
@@ -114,12 +131,16 @@ function ns:ApplyLayout()
             pip:SetPoint("TOPLEFT", frame, "TOPLEFT", slot * (width + gap), 0)
         end
 
+        -- Both bars share a rect and fill direction, so the clip grows over the fill.
+        for _, bar in ipairs({ pip.reveal, pip.bar }) do
+            bar:ClearAllPoints()
+            bar:SetPoint("TOPLEFT", pip, "TOPLEFT", inset, -inset)
+            bar:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", -inset, inset)
+            bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
+            bar:SetReverseFill(db.reverse)
+        end
+
         local fill = db.usePipColors and db.pipColors[i] or db.fillColor
-        pip.bar:ClearAllPoints()
-        pip.bar:SetPoint("TOPLEFT", pip, "TOPLEFT", inset, -inset)
-        pip.bar:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", -inset, inset)
-        pip.bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
-        pip.bar:SetReverseFill(db.reverse)
         pip.bar:SetStatusBarTexture(texture)
         pip.bar:SetStatusBarColor(fill.r, fill.g, fill.b)
         pip.bg:SetColorTexture(empty.r, empty.g, empty.b, db.emptyAlpha)
@@ -161,10 +182,12 @@ function ns:UpdatePoints()
     end
 
     -- nil only on a client without interpolation, where SetValue takes one argument.
-    local mode = Interpolation
+    local ease = Interpolation
         and (self.db.smooth and Interpolation.ExponentialEaseOut or Interpolation.Immediate)
+    local snap = Interpolation and Interpolation.Immediate
     for _, pip in ipairs(pips) do
-        pip.bar:SetValue(points, mode)
+        pip.reveal:SetValue(points, ease)
+        pip.bar:SetValue(points, snap)
     end
 end
 
