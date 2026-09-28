@@ -90,7 +90,11 @@ local function CopyDefaults(src, dst)
     end
 end
 
+-- Sliders report every pixel of a drag, most of which snap to the value already set.
 function ns:Set(key, value)
+    if self.db[key] == value then
+        return
+    end
     self.db[key] = value
     self:Refresh()
 end
@@ -100,12 +104,18 @@ function ns:SetLocked(locked)
     ns.Options.Refresh()
 end
 
--- Wipes in place so everything holding ns.db keeps the same table.
+-- Wipes in place so everything holding ns.db keeps the same table. An open colour picker
+-- is closed first, or its Cancel would write the old colour into the fresh defaults;
+-- Hide() does not run Cancel.
 function ns:ResetSettings()
+    if ColorPickerFrame and ColorPickerFrame:IsShown() then
+        ColorPickerFrame:Hide()
+    end
     wipe(self.db)
     CopyDefaults(self.defaults, self.db)
     self:Refresh()
     ns.Options.Refresh()
+    ns.Print("settings reset to defaults.")
 end
 
 ----------------------------------------------------------------------------------
@@ -207,7 +217,6 @@ SlashCmdList.GROGUE = ns.Guard(function(msg)
         ns.Print("locked.")
     elseif cmd == "reset" then
         ns:ResetSettings()
-        ns.Print("settings reset to defaults.")
     else
         ns.Print("/grogue [config | unlock | lock | reset]")
     end

@@ -10,22 +10,24 @@ ns.canSmooth = Interpolation ~= nil
 local frame
 local pips = {}
 
+-- The border sits inside the pip, so it never reaches a neighbour whatever the spacing,
+-- and the frame's size (and clamping to the screen) includes it.
 local function CreateBorder(holder)
     local left = holder:CreateTexture(nil, "BORDER")
-    left:SetPoint("TOPRIGHT", holder, "TOPLEFT")
-    left:SetPoint("BOTTOMRIGHT", holder, "BOTTOMLEFT")
+    left:SetPoint("TOPLEFT", holder, "TOPLEFT")
+    left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT")
 
     local right = holder:CreateTexture(nil, "BORDER")
-    right:SetPoint("TOPLEFT", holder, "TOPRIGHT")
-    right:SetPoint("BOTTOMLEFT", holder, "BOTTOMRIGHT")
+    right:SetPoint("TOPRIGHT", holder, "TOPRIGHT")
+    right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT")
 
     local top = holder:CreateTexture(nil, "BORDER")
-    top:SetPoint("BOTTOMLEFT", left, "TOPLEFT")
-    top:SetPoint("BOTTOMRIGHT", right, "TOPRIGHT")
+    top:SetPoint("TOPLEFT", left, "TOPRIGHT")
+    top:SetPoint("TOPRIGHT", right, "TOPLEFT")
 
     local bottom = holder:CreateTexture(nil, "BORDER")
-    bottom:SetPoint("TOPLEFT", left, "BOTTOMLEFT")
-    bottom:SetPoint("TOPRIGHT", right, "BOTTOMRIGHT")
+    bottom:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT")
+    bottom:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT")
 
     holder.border = { left = left, right = right, top = top, bottom = bottom }
 end
@@ -42,7 +44,6 @@ local function CreatePip(index)
     -- Each bar covers one point of the range, so the client renders it empty below
     -- that point and full at or above it without us reading the count.
     local bar = CreateFrame("StatusBar", nil, holder)
-    bar:SetAllPoints()
     bar:SetMinMaxValues(index - 1, index)
     bar:SetValue(0)
     holder.bar = bar
@@ -61,7 +62,8 @@ function ns:CreateComboBar()
         self:StopMovingOrSizing()
         local point, _, relativePoint, x, y = self:GetPoint()
         local db = ns.db
-        db.point, db.relativePoint, db.x, db.y = point, relativePoint, x, y
+        db.point, db.relativePoint = point, relativePoint
+        db.x, db.y = x * db.scale, y * db.scale
     end)
 
     frame.mover = frame:CreateTexture(nil, "BACKGROUND")
@@ -87,9 +89,13 @@ function ns:ApplyLayout()
     local vertical = db.orientation == "VERTICAL"
     local texture = (self.textures[db.texture] or self.textures.flat).path
     local empty, edge = db.emptyColor, db.borderColor
+    -- Leave at least a pixel of fill however small the pip.
+    local inset = db.border and math.min(db.borderSize, math.floor((math.min(width, height) - 1) / 2)) or 0
 
+    -- The position is saved in UIParent units, but SetPoint takes offsets in the frame's
+    -- own scaled units; dividing keeps the bar in place when the scale changes.
     frame:ClearAllPoints()
-    frame:SetPoint(db.point, UIParent, db.relativePoint, db.x, db.y)
+    frame:SetPoint(db.point, UIParent, db.relativePoint, db.x / db.scale, db.y / db.scale)
     frame:SetScale(db.scale)
     frame:SetAlpha(db.alpha)
     if vertical then
@@ -109,6 +115,9 @@ function ns:ApplyLayout()
         end
 
         local fill = db.usePipColors and db.pipColors[i] or db.fillColor
+        pip.bar:ClearAllPoints()
+        pip.bar:SetPoint("TOPLEFT", pip, "TOPLEFT", inset, -inset)
+        pip.bar:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", -inset, inset)
         pip.bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
         pip.bar:SetReverseFill(db.reverse)
         pip.bar:SetStatusBarTexture(texture)
@@ -116,10 +125,10 @@ function ns:ApplyLayout()
         pip.bg:SetColorTexture(empty.r, empty.g, empty.b, db.emptyAlpha)
 
         local border = pip.border
-        border.left:SetWidth(db.borderSize)
-        border.right:SetWidth(db.borderSize)
-        border.top:SetHeight(db.borderSize)
-        border.bottom:SetHeight(db.borderSize)
+        border.left:SetWidth(inset)
+        border.right:SetWidth(inset)
+        border.top:SetHeight(inset)
+        border.bottom:SetHeight(inset)
         for _, side in pairs(border) do
             side:SetColorTexture(edge.r, edge.g, edge.b)
             side:SetShown(db.border)
@@ -151,13 +160,11 @@ function ns:UpdatePoints()
         points = GetComboPoints("player", "target")
     end
 
+    -- nil only on a client without interpolation, where SetValue takes one argument.
+    local mode = Interpolation
+        and (self.db.smooth and Interpolation.ExponentialEaseOut or Interpolation.Immediate)
     for _, pip in ipairs(pips) do
-        if Interpolation then
-            local mode = self.db.smooth and Interpolation.ExponentialEaseOut or Interpolation.Immediate
-            pip.bar:SetValue(points, mode)
-        else
-            pip.bar:SetValue(points)
-        end
+        pip.bar:SetValue(points, mode)
     end
 end
 

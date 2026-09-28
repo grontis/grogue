@@ -170,10 +170,7 @@ local function build()
         T.size.small, T.muted)
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, bottom - 6)
 
-    local reset = Widgets.Button(panel, "Reset all", function()
-        ns:ResetSettings()
-        ns.Print("settings reset to defaults.")
-    end, 90)
+    local reset = Widgets.Button(panel, "Reset all", function() ns:ResetSettings() end, 90)
     reset:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, bottom)
 
     panel:SetSize(WIDTH, -bottom + 22 + PAD)
