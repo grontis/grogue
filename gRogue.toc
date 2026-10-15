@@ -5,6 +5,8 @@
 ## Version: 0.1.0
 ## IconTexture: Interface\Icons\Ability_Rogue_Eviscerate
 ## AddonCompartmentFunc: gRogue_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: gRogue_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: gRogue_OnAddonCompartmentLeave
 ## SavedVariables: gRogueDB
 
 Core.lua

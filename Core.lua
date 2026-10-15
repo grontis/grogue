@@ -222,6 +222,19 @@ SlashCmdList.GROGUE = ns.Guard(function(msg)
     end
 end)
 
+-- The addon list on the minimap (## AddonCompartmentFunc in the TOC): a click opens the
+-- settings, and hovering says so, or says gRogue does nothing on this character.
 function gRogue_OnAddonCompartmentClick()
     SlashCmdList.GROGUE("")
+end
+
+function gRogue_OnAddonCompartmentEnter(_, button)
+    GameTooltip:SetOwner(button, "ANCHOR_LEFT")
+    GameTooltip:SetText("gRogue")
+    GameTooltip:AddLine(ns.frame and "Click for settings" or "Only active on rogues", 1, 1, 1)
+    GameTooltip:Show()
+end
+
+function gRogue_OnAddonCompartmentLeave()
+    GameTooltip:Hide()
 end
