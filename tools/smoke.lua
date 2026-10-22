@@ -549,6 +549,12 @@ check(not f:IsShown(), "in a vehicle from the first frame: hidden")
 inVehicle = false
 H.fire("UNIT_EXITED_VEHICLE", "player")
 check(f:IsShown(), "out of it: shown")
+inVehicle = true
+H.fire("UNIT_ENTERED_VEHICLE", "player")
+check(not f:IsShown(), "into one again: hidden")
+inVehicle = false
+H.fire("PLAYER_ENTERING_WORLD")
+check(f:IsShown(), "a loading screen that ends the ride shows it, even without UNIT_EXITED_VEHICLE")
 noErrors("no errors reloading in a vehicle")
 
 print("== a client without the vehicle events")

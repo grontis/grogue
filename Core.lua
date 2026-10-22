@@ -218,6 +218,11 @@ end
 -- events
 ----------------------------------------------------------------------------------
 
+-- Never a secret: Forever's API docs give UnitInVehicle no secret return.
+local function InVehicle()
+    return UnitInVehicle and UnitInVehicle("player") or false
+end
+
 local events = CreateFrame("Frame")
 local handlers = {}
 
@@ -275,11 +280,13 @@ On("ADDON_LOADED", function(_, name)
     end
 
     ns.inCombat = InCombatLockdown()
-    -- Never a secret: Forever's API docs give UnitInVehicle no secret return.
-    ns.inVehicle = UnitInVehicle and UnitInVehicle("player") or false
+    ns.inVehicle = InVehicle()
     ns:CreateComboBar()
 
+    -- The vehicle state is read again at each loading screen, so a ride that ends behind
+    -- one can't leave the bar hidden.
     On("PLAYER_ENTERING_WORLD", function()
+        ns.inVehicle = InVehicle()
         ns:Refresh()
     end)
     -- Combo points live on the target, so a target swap changes the count without any
