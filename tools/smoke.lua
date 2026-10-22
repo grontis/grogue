@@ -1,0 +1,470 @@
+-- tools/smoke.lua -- load gRogue against tools/stub_wow.lua and check what it does: the
+-- non-rogue path, settings over a save, the bar's layout and its secret count, dragging,
+-- when the bar shows, the settings panel, /grogue and the addon compartment.
+--
+--   luajit tools/smoke.lua .        (or tools/smoke.sh)
+--   SMOKE_VERBOSE=1 ... also prints the addon's chat output
+--
+-- A pass here means the logic holds against the stub. It says nothing about how anything
+-- looks, or about a client behaviour the stub does not model: those need a session.
+
+local ADDON_DIR = arg[1] or "."
+local HERE = arg[0]:match("^(.*)/[^/]*$") or "."
+local say = print   -- the stub replaces print to capture the addon's chat
+local H = assert(loadfile(HERE .. "/stub_wow.lua"))(ADDON_DIR)
+local print = say
+
+local failures, passes = 0, 0
+local function check(cond, msg)
+    if cond then
+        passes = passes + 1
+        print("PASS " .. msg)
+    else
+        failures = failures + 1
+        print("FAIL " .. msg)
+    end
+end
+
+-- Chat this session, and the errors in it not yet looked at.
+local errorsSeen = 0
+local function said(pattern)
+    for _, line in ipairs(H.printed) do
+        if line:find(pattern) then
+            return true
+        end
+    end
+    return false
+end
+local function newErrors()
+    local out = {}
+    for i = errorsSeen + 1, #H.printed do
+        local line = H.printed[i]
+        if line:find("error") or line:find("could not") then
+            out[#out + 1] = line
+        end
+    end
+    errorsSeen = #H.printed
+    return out
+end
+local function noErrors(msg)
+    local e = newErrors()
+    check(#e == 0, msg .. (#e > 0 and (" (" .. table.concat(e, " | ") .. ")") or ""))
+end
+
+-- A new session over whatever gRogueDB holds, up to and including ADDON_LOADED.
+local function session()
+    local ns = H.load()
+    errorsSeen = 0
+    H.fire("ADDON_LOADED", "gRogue")
+    return ns
+end
+
+-- The bar's pips, in order: the frames parented to it.
+local function pipsOf(frame)
+    local pips = {}
+    for _, f in ipairs(H.created) do
+        if f._parent == frame and f._type == "Frame" then
+            pips[#pips + 1] = f
+        end
+    end
+    return pips
+end
+
+-- Every pip's two bars, the reveal first.
+local function barsOf(pips)
+    local bars = {}
+    for _, pip in ipairs(pips) do
+        bars[#bars + 1] = pip.reveal
+        bars[#bars + 1] = pip.bar
+    end
+    return bars
+end
+
+-- Whether every bar holds a secret (value "secret") or the given number.
+local function allBars(pips, value)
+    for _, bar in ipairs(barsOf(pips)) do
+        if value == "secret" then
+            if not bar._secret then
+                return false
+            end
+        elseif bar._secret or bar._value ~= value then
+            return false
+        end
+    end
+    return true
+end
+
+-- The panel's control, or button, whose label reads text.
+local function control(text)
+    for _, f in ipairs(H.created) do
+        for _, region in ipairs(f._regions or {}) do
+            if region._type == "FontString" and region._text == text then
+                return f
+            end
+        end
+    end
+end
+
+local function near(a, b)
+    return type(a) == "number" and math.abs(a - b) < 1e-9
+end
+
+------------------------------------------------------------------------------ a warrior
+print("== a warrior")
+gRogueDB = nil
+playerClass = "WARRIOR"
+local ns = H.load()
+H.fire("ADDON_LOADED", "SomeOtherAddon")
+check(ns.db == nil, "another addon's ADDON_LOADED is not ours")
+H.fire("ADDON_LOADED", "gRogue")
+check(ns.db ~= nil and ns.db == gRogueDB and ns.db.scale == 1 and ns.db.locked == true, "settings made from the defaults")
+check(ns.frame == nil and gRogueComboFrame == nil, "no bar")
+SlashCmdList.GROGUE("")
+check(said("only active on rogues"), "/grogue says it is only active on rogues")
+gRogue_OnAddonCompartmentEnter("gRogue", H.loose("menuButton"))
+check(GameTooltip._lines[2] == "Only active on rogues", "so does the compartment's tooltip")
+gRogue_OnAddonCompartmentClick()
+check(gRogueOptions == nil, "and a click opens no panel")
+noErrors("no errors as a warrior")
+
+------------------------------------------------------------------------------ a new rogue
+print("== a new rogue, no target")
+gRogueDB = nil
+playerClass = "ROGUE"
+comboPoints = 0
+ns = session()
+local f = ns.frame
+check(f ~= nil and f == gRogueComboFrame and f._parent == UIParent, "the bar exists, on UIParent")
+local pips = pipsOf(f)
+check(#pips == 5, "five pips (" .. #pips .. ")")
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors at PLAYER_ENTERING_WORLD")
+local at = f._points.CENTER
+check(at and at.rel == UIParent and at.relPoint == "CENTER" and at.x == 0 and at.y == -180
+    and f._scale == 1 and f._alpha == 1, "at the default spot, scale 1, opaque")
+check(f._width == 5 * 30 + 4 * 4 and f._height == 12, "sized for five 30 x 12 pips 4 apart")
+local placed = true
+for i, pip in ipairs(pips) do
+    local tl = pip._points.TOPLEFT
+    placed = placed and tl ~= nil and tl.rel == f and tl.x == (i - 1) * 34 and tl.y == 0
+        and pip._width == 30 and pip._height == 12
+end
+check(placed, "pips left to right, 34 px apart")
+check(f:IsShown() and f._mouse == false and not f.mover:IsShown() and not f.moverLabel:IsShown(),
+    "locked: shown, no mouse, no mover")
+check(allBars(pips, 0), "a count of 0 reaches every bar")
+check(pips[1].reveal._interp == 1 and pips[1].bar._interp == 0, "smooth fill (the default): the reveal eases, the bar snaps")
+local structure = true
+for k, pip in ipairs(pips) do
+    local clip = pip.bar._parent
+    structure = structure and pip.reveal._parent == pip and clip._parent == pip
+        and clip._clips == true and clip._allPoints == pip.reveal._fill
+        and pip.reveal._points.TOPLEFT.rel == pip and pip.bar._points.TOPLEFT.rel == pip
+        and pip.reveal._min == k - 1 and pip.reveal._max == k and pip.bar._min == k - 1 and pip.bar._max == k
+        and pip.reveal._barColor[4] == 0
+end
+check(structure, "each pip: an invisible reveal bar, the visible bar in a clip on the reveal's fill, "
+    .. "both anchored to the pip, spanning k-1 to k")
+local edge = pips[1].border
+check(edge.left._width == 1 and edge.top._height == 1 and edge.left:IsShown()
+    and pips[1].bar._points.TOPLEFT.x == 1 and pips[1].bar._points.TOPLEFT.y == -1,
+    "a 1 px border inside the pip, the bars inset by it")
+check(pips[1].bar._fill._texture == ns.textures.flat.path and near(pips[1].bar._barColor[2], 0.82)
+    and pips[1].bg._color[4] == 0.5, "flat texture, gold fill, empty at half opacity")
+noErrors("no errors for a new rogue")
+
+------------------------------------------------------------------------------ a prior save
+print("== a rogue with a prior save")
+gRogueDB = {
+    x = 40, y = -100, scale = 2, locked = false, border = false, smooth = false,
+    texture = "nope", pipColors = { { r = 0.1, g = 0.1, b = 0.1 } }, bogus = 7,
+}
+ns = session()
+local db = ns.db
+check(db == gRogueDB and db.x == 40 and db.y == -100 and db.scale == 2, "saved values kept")
+check(db.locked == false and db.border == false and db.smooth == false,
+    "a saved false is kept, not taken for a missing value")
+check(db.point == "CENTER" and db.spacing == 4 and db.hideOutOfCombat == false, "missing settings filled from the defaults")
+check(db.pipColors[1].r == 0.1 and db.pipColors[2].r == 1 and near(db.pipColors[2].g, 0.75),
+    "point colours merged one by one")
+check(db.fillColor ~= ns.defaults.fillColor and db.pipColors[2] ~= ns.defaults.pipColors[2],
+    "colour tables are copies, never the defaults' own")
+check(db.bogus == 7, "a key this version does not know is left alone")
+f = ns.frame
+pips = pipsOf(f)
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors at PLAYER_ENTERING_WORLD")
+check(f._points.CENTER.x == 20 and f._points.CENTER.y == -50 and f._scale == 2,
+    "the saved offset divided by the scale (40, -100 at scale 2 -> 20, -50)")
+check(f:IsShown() and f._mouse == true and f.mover:IsShown() and f.moverLabel:IsShown(),
+    "unlocked: shown, mouse on, mover and label shown")
+check(allBars(pips, 3), "while unlocked every bar previews 3 points")
+check(pips[1].reveal._interp == 0 and pips[1].bar._interp == 0, "smooth fill off: both bars snap")
+check(not pips[1].border.left:IsShown() and pips[1].bar._points.TOPLEFT.x == 0, "no border: hidden, the bars not inset")
+check(pips[1].bar._fill._texture == ns.textures.flat.path, "a texture this version does not know draws as flat")
+ns:Set("smooth", true)
+check(pips[1].reveal._interp == 1 and pips[1].bar._interp == 0, "smooth fill on: the reveal eases, the bar snaps")
+ns:Set("border", true)
+check(pips[1].border.left:IsShown() and pips[1].bar._points.TOPLEFT.x == 1, "border on: shown, the bars inset")
+
+------------------------------------------------------------------------------ drag
+print("== drag")
+f._dragTo = { "TOPLEFT", UIParent, "BOTTOMLEFT", 100, 200 }
+f._OnDragStart(f, "LeftButton")
+check(f._moving == true, "a drag moves the bar")
+f._OnDragStop(f)
+check(f._moving == false and db.point == "TOPLEFT" and db.relativePoint == "BOTTOMLEFT" and db.x == 200 and db.y == 400,
+    "the drop saves the point and the offset times the scale (100, 200 at scale 2 -> 200, 400)")
+f._dragTo = nil
+ns:Set("scale", 1)
+check(f._points.TOPLEFT.x == 200 and f._points.TOPLEFT.y == 400 and f._points.TOPLEFT.relPoint == "BOTTOMLEFT"
+    and f._scale == 1, "scale 1: the same place, offset 200, 400")
+ns:Set("scale", 0.5)
+check(f._points.TOPLEFT.x == 400 and f._points.TOPLEFT.y == 800 and f._scale == 0.5, "scale 0.5: the same place, offset 400, 800")
+ns:Set("scale", 1)
+SlashCmdList.GROGUE("lock")
+check(db.locked == true and f._mouse == false and not f.mover:IsShown() and said("r: locked%.$"),
+    "/grogue lock: mouse off, mover hidden, and says so")
+noErrors("no errors dragging")
+
+------------------------------------------------------------------------------ secrets
+print("== the count as a secret")
+comboPoints = "secret"
+targetExists = true
+H.fire("UNIT_POWER_FREQUENT", "player", "ENERGY")
+check(allBars(pips, "secret"), "a secret count reaches all ten bars' SetValue")
+noErrors("nothing compares it, tests it or does arithmetic with it")
+H.fire("PLAYER_TARGET_CHANGED")
+check(allBars(pips, "secret"), "a target change reads it again")
+noErrors("no errors at a target change")
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors in a full refresh")
+check(#H.leaks == 0 and #H.readBacks == 0, "it went to SetValue and nowhere else, and no bar was read back ("
+    .. table.concat(H.leaks, ", ") .. table.concat(H.readBacks, ", ") .. ")")
+comboPoints = 4
+H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+check(allBars(pips, 4), "a plain count reaches every bar too")
+
+------------------------------------------------------------------------------ visibility
+print("== when the bar shows")
+local wrong = {}
+for _, locked in ipairs({ true, false }) do
+    for _, needTarget in ipairs({ false, true }) do
+        for _, needCombat in ipairs({ false, true }) do
+            for _, target in ipairs({ false, true }) do
+                for _, combat in ipairs({ false, true }) do
+                    ns:Set("locked", locked)
+                    ns:Set("hideWithoutTarget", needTarget)
+                    ns:Set("hideOutOfCombat", needCombat)
+                    targetExists = target
+                    H.fire("PLAYER_TARGET_CHANGED")
+                    H.fire(combat and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
+                    local want = not locked or ((not needTarget or target) and (not needCombat or combat))
+                    if f:IsShown() ~= want or f.mover:IsShown() ~= not locked or f._mouse ~= not locked then
+                        wrong[#wrong + 1] = ("locked %s, hide without target %s, hide out of combat %s, target %s, combat %s")
+                            :format(tostring(locked), tostring(needTarget), tostring(needCombat), tostring(target), tostring(combat))
+                    end
+                end
+            end
+        end
+    end
+end
+check(#wrong == 0, "shown while unlocked, otherwise as the target and combat settings say: 32 cases"
+    .. (#wrong > 0 and (" (wrong: " .. table.concat(wrong, "; ") .. ")") or ""))
+ns:Set("locked", true)
+ns:Set("hideWithoutTarget", false)
+ns:Set("hideOutOfCombat", false)
+targetExists = true
+H.fire("PLAYER_TARGET_CHANGED")
+H.fire("PLAYER_REGEN_ENABLED")
+noErrors("no errors in the visibility cases")
+
+------------------------------------------------------------------------------ layout
+print("== layout")
+ns:Set("orientation", "VERTICAL")
+ns:Set("reverse", true)
+check(f._width == 30 and f._height == 5 * 12 + 4 * 4, "vertical: one pip wide, five high")
+check(pips[1]._points.BOTTOMLEFT.y == 4 * 16 and pips[5]._points.BOTTOMLEFT.y == 0, "vertical, reversed: pip 1 at the top")
+check(pips[1].bar._orientation == "VERTICAL" and pips[1].bar._reverse == true
+    and pips[1].reveal._orientation == "VERTICAL" and pips[1].reveal._reverse == true,
+    "both bars vertical and reversed, so the clip grows over the fill")
+ns:Set("reverse", false)
+check(pips[1]._points.BOTTOMLEFT.y == 0 and pips[5]._points.BOTTOMLEFT.y == 64, "vertical: pip 1 at the bottom")
+ns:Set("orientation", "HORIZONTAL")
+ns:Set("reverse", true)
+check(pips[1]._points.TOPLEFT.x == 136 and pips[5]._points.TOPLEFT.x == 0, "horizontal, reversed: pip 1 at the right")
+ns:Set("reverse", false)
+ns:Set("pipWidth", 4)
+ns:Set("pipHeight", 4)
+ns:Set("borderSize", 6)
+check(pips[1].border.left._width == 1 and pips[1].bar._points.TOPLEFT.x == 1,
+    "a 6 px border in a 4 px pip clamps to 1, leaving a pixel of fill")
+ns:Set("pipWidth", 30)
+ns:Set("pipHeight", 12)
+check(pips[1].border.left._width == 5, "in a 30 x 12 pip it clamps to 5")
+ns:Set("borderSize", 1)
+ns:Set("usePipColors", true)
+check(pips[1].bar._barColor[1] == 0.1 and pips[2].bar._barColor[1] == 1 and near(pips[2].bar._barColor[2], 0.75),
+    "a colour for each point")
+ns:Set("usePipColors", false)
+check(pips[2].bar._barColor[1] == 1 and near(pips[2].bar._barColor[2], 0.82), "one fill colour again")
+ns:Set("texture", "raid")
+check(pips[3].bar._fill._texture == ns.textures.raid.path, "the chosen texture")
+ns:Set("alpha", 0.5)
+ns:Set("emptyAlpha", 0.25)
+check(f._alpha == 0.5 and pips[1].bg._color[4] == 0.25, "opacity and empty opacity")
+ns:Set("texture", "flat")
+ns:Set("alpha", 1)
+ns:Set("emptyAlpha", 0.5)
+noErrors("no errors in layout")
+
+------------------------------------------------------------------------------ the panel
+print("== the settings panel")
+local function last()
+    return H.printed[#H.printed] or ""
+end
+SlashCmdList.GROGUE("config")
+local panel = gRogueOptions
+check(panel ~= nil and panel:IsShown(), "/grogue config opens it")
+check(UISpecialFrames[1] == "gRogueOptions", "Escape closes it")
+noErrors("no errors building it")
+local lock = control("Lock position")
+check(lock ~= nil and lock.kind == "check" and lock.checked == true, "the lock check shows the setting")
+lock:Click()
+check(db.locked == false and f.mover:IsShown(), "unticking it unlocks the bar")
+lock:Click()
+check(db.locked == true and not f.mover:IsShown(), "ticking it locks the bar again")
+local scale = control("Scale")
+check(scale ~= nil and scale.slider._min == 50 and scale.slider._max == 200 and scale.slider._value == 100,
+    "the scale slider runs 50 to 200 percent and shows 100")
+scale.slider:SetValue(152)
+check(db.scale == 1.5 and f._scale == 1.5, "dragged to 152, it snaps to its 5 percent step: scale 1.5")
+local orientation = control("Orientation")
+orientation.field:Click()
+check(orientation:IsOpen(), "a click opens the orientation list")
+orientation.items[2]:Click()
+check(db.orientation == "VERTICAL" and not orientation:IsOpen() and orientation.text._text == "Vertical",
+    "choosing Vertical sets it and closes the list")
+orientation.field:Click()
+orientation.items[1]:Click()
+check(db.orientation == "HORIZONTAL", "and back to Horizontal")
+check(control("Smooth fill") ~= nil, "smooth fill is on offer")
+
+local swatch = control("Filled colour")
+check(swatch ~= nil and swatch.kind == "swatch", "the fill colour swatch")
+swatch:Click()
+local info = ColorPickerFrame.info
+check(ColorPickerFrame:IsShown() and info.r == 1 and near(info.g, 0.82) and info.b == 0,
+    "a click opens the colour picker on the fill colour")
+ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = 0, 0, 1
+info.swatchFunc()
+check(db.fillColor.r == 0 and db.fillColor.b == 1 and pips[1].bar._barColor[3] == 1,
+    "picking blue writes it into the setting and redraws")
+ns:ResetSettings()
+check(not ColorPickerFrame:IsShown() and db.fillColor.r == 1 and near(db.fillColor.g, 0.82) and db.fillColor.b == 0,
+    "a reset with the picker open closes it and restores the colour")
+check(last():find("settings reset to defaults") ~= nil, "and says so")
+check(db.scale == 1 and scale.slider._value == 100, "the panel shows the defaults after a reset")
+swatch:Click()
+ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = 0, 1, 0
+ColorPickerFrame.info.swatchFunc()
+check(db.fillColor.g == 1, "picking green")
+ColorPickerFrame.info.cancelFunc()
+check(db.fillColor.r == 1 and near(db.fillColor.g, 0.82) and db.fillColor.b == 0,
+    "cancel puts back the colour the picker opened on")
+ColorPickerFrame:Hide()
+
+scale.slider:SetValue(150)
+control("Reset all"):Click()
+check(db.scale == 1 and scale.slider._value == 100 and last():find("settings reset to defaults") ~= nil,
+    "Reset all restores the defaults, and the panel shows them")
+control("x"):Click()
+check(not panel:IsShown(), "the x closes the panel")
+SlashCmdList.GROGUE("")
+check(panel:IsShown(), "/grogue opens it again")
+SlashCmdList.GROGUE("")
+check(not panel:IsShown(), "and closes it")
+noErrors("no errors in the panel")
+
+------------------------------------------------------------------------------ /grogue
+print("== /grogue")
+SlashCmdList.GROGUE("unlock")
+check(db.locked == false and f.mover:IsShown() and last():find("unlocked%. Drag to move") ~= nil,
+    "unlock: the mover shows, and it says how to move it")
+SlashCmdList.GROGUE("  LOCK ")
+check(db.locked == true and not f.mover:IsShown() and last():find("locked%.$") ~= nil, "lock, in any case and with spaces")
+SlashCmdList.GROGUE("config")
+check(panel:IsShown(), "config opens the panel")
+SlashCmdList.GROGUE("config")
+check(not panel:IsShown(), "and closes it")
+ns:Set("scale", 2)
+SlashCmdList.GROGUE("reset")
+check(db.scale == 1 and last():find("settings reset to defaults") ~= nil, "reset")
+SlashCmdList.GROGUE("bogus")
+check(last():find("/grogue %[config | unlock | lock | reset%]") ~= nil, "anything else: the usage")
+noErrors("no errors in /grogue")
+
+------------------------------------------------------------------------------ the compartment
+print("== the addon compartment")
+local declared = {}
+for line in io.lines(ADDON_DIR .. "/gRogue.toc") do
+    local key, fn = line:gsub("\r$", ""):match("^##%s*(AddonCompartmentFunc%w*):%s*(%S+)")
+    if key then
+        declared[key] = fn
+    end
+end
+local found = 0
+for _, key in ipairs({ "AddonCompartmentFunc", "AddonCompartmentFuncOnEnter", "AddonCompartmentFuncOnLeave" }) do
+    if declared[key] and type(_G[declared[key]]) == "function" then
+        found = found + 1
+    end
+end
+check(found == 3, "the TOC's three compartment functions exist")
+if found == 3 then
+    local entry = H.loose("menuButton")
+    _G[declared.AddonCompartmentFuncOnEnter]("gRogue", entry)
+    check(GameTooltip._owner == entry and GameTooltip._anchor == "ANCHOR_LEFT" and GameTooltip:IsShown()
+        and GameTooltip._lines[1] == "gRogue" and GameTooltip._lines[2] == "Click for settings",
+        "hovering the entry: a tooltip beside it says a click opens the settings")
+    _G[declared.AddonCompartmentFuncOnLeave]("gRogue", entry)
+    check(not GameTooltip:IsShown(), "leaving it hides the tooltip")
+    _G[declared.AddonCompartmentFunc]("gRogue", "LeftButton")
+    check(panel:IsShown(), "a click opens the settings")
+    _G[declared.AddonCompartmentFunc]("gRogue", "LeftButton")
+    check(not panel:IsShown(), "another closes them")
+end
+noErrors("no errors in the compartment")
+
+------------------------------------------------------------------------------ a reload in combat
+print("== a reload in combat")
+inCombat = true
+gRogueDB = { hideOutOfCombat = true }
+ns = session()
+f = ns.frame
+H.fire("PLAYER_ENTERING_WORLD")
+check(f:IsShown(), "in combat from the first frame: shown, though hidden out of combat")
+H.fire("PLAYER_REGEN_ENABLED")
+check(not f:IsShown(), "combat over: hidden")
+inCombat = false
+noErrors("no errors reloading in combat")
+
+------------------------------------------------------------------------------ no interpolation
+print("== a client without StatusBarInterpolation")
+local Interpolation = Enum.StatusBarInterpolation
+Enum.StatusBarInterpolation = nil
+gRogueDB = nil
+ns = session()
+check(ns.canSmooth == false, "no smooth fill on offer")
+H.fire("PLAYER_ENTERING_WORLD")
+comboPoints = "secret"
+H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+check(allBars(pipsOf(ns.frame), "secret"), "the count still reaches every bar")
+noErrors("no errors at an update")
+SlashCmdList.GROGUE("config")
+check(gRogueOptions:IsShown() and control("Smooth fill") == nil, "the panel opens, without the smooth fill check")
+noErrors("no errors in the panel")
+Enum.StatusBarInterpolation = Interpolation
+comboPoints = 0
+
+print(("%d passed, %d failed"):format(passes, failures))
+os.exit(failures == 0 and 0 or 1)
