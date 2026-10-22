@@ -13,8 +13,9 @@
 -- nothing else.
 --
 -- The client is set through globals the smoke flips: playerClass, targetExists, inCombat,
--- comboPoints (a number, or "secret" for a new secret on every read), GetComboPoints and
--- Enum. gRogueDB is the SavedVariables the next session loads.
+-- inVehicle, comboPoints (a number, or "secret" for a new secret on every read),
+-- GetComboPoints, Enum and missingEvents. gRogueDB is the SavedVariables the next session
+-- loads.
 --
 -- Loaded by tools/smoke.lua with the addon's directory; returns a handle that loads the
 -- addon as a new session, fires events and reaches the records.
@@ -199,12 +200,23 @@ function Loose:SetScript(handler, fn) self["_" .. handler] = fn end
 function Loose:GetScript(handler) return self["_" .. handler] end
 function Loose:Click(button) if self._OnClick then self._OnClick(self, button or "LeftButton") end end
 
+-- Events this build lacks (the smoke fills it): registering one throws, as in the client.
+missingEvents = {}
+
+local function known(event)
+    if missingEvents[event] then
+        error('RegisterEvent(): attempt to register unknown event "' .. event .. '"', 3)
+    end
+end
+
 function Loose:RegisterEvent(event)
+    known(event)
     self._events = self._events or {}
     self._events[event] = true
 end
 -- A unit event reaches the frame only for the units it names, as in the client.
 function Loose:RegisterUnitEvent(event, ...)
+    known(event)
     self._events = self._events or {}
     self._events[event] = { ... }
 end
@@ -315,6 +327,11 @@ end
 inCombat = false
 function InCombatLockdown()
     return inCombat
+end
+
+inVehicle = false
+function UnitInVehicle(unit)
+    return unit == "player" and inVehicle
 end
 
 -- The count on the target: a number, or "secret".

@@ -275,6 +275,8 @@ On("ADDON_LOADED", function(_, name)
     end
 
     ns.inCombat = InCombatLockdown()
+    -- Never a secret: Forever's API docs give UnitInVehicle no secret return.
+    ns.inVehicle = UnitInVehicle and UnitInVehicle("player") or false
     ns:CreateComboBar()
 
     On("PLAYER_ENTERING_WORLD", function()
@@ -299,6 +301,15 @@ On("ADDON_LOADED", function(_, name)
         ns.inCombat = false
         ns:UpdateVisibility()
     end)
+    -- In a vehicle the player's own combo points don't apply: hidden until they get out.
+    On("UNIT_ENTERED_VEHICLE", function()
+        ns.inVehicle = true
+        ns:UpdateVisibility()
+    end, "player")
+    On("UNIT_EXITED_VEHICLE", function()
+        ns.inVehicle = false
+        ns:UpdateVisibility()
+    end, "player")
 end)
 
 ----------------------------------------------------------------------------------

@@ -291,36 +291,40 @@ check(H.calls.UnitPower == 0, "the count is GetComboPoints', not UnitPower's, wh
 
 ------------------------------------------------------------------------------ visibility
 print("== when the bar shows")
+-- Every combination of locked, the two hide settings, a target, combat and a vehicle.
 local wrong = {}
-for _, locked in ipairs({ true, false }) do
-    for _, needTarget in ipairs({ false, true }) do
-        for _, needCombat in ipairs({ false, true }) do
-            for _, target in ipairs({ false, true }) do
-                for _, combat in ipairs({ false, true }) do
-                    ns:Set("locked", locked)
-                    ns:Set("hideWithoutTarget", needTarget)
-                    ns:Set("hideOutOfCombat", needCombat)
-                    targetExists = target
-                    H.fire("PLAYER_TARGET_CHANGED")
-                    H.fire(combat and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
-                    local want = not locked or ((not needTarget or target) and (not needCombat or combat))
-                    if f:IsShown() ~= want or f.mover:IsShown() ~= not locked or f._mouse ~= not locked then
-                        wrong[#wrong + 1] = ("locked %s, hide without target %s, hide out of combat %s, target %s, combat %s")
-                            :format(tostring(locked), tostring(needTarget), tostring(needCombat), tostring(target), tostring(combat))
-                    end
-                end
-            end
-        end
+for case = 0, 63 do
+    local function on(n)
+        return math.floor(case / 2 ^ n) % 2 == 1
+    end
+    local locked, needTarget, needCombat, target, combat, vehicle = on(0), on(1), on(2), on(3), on(4), on(5)
+    ns:Set("locked", locked)
+    ns:Set("hideWithoutTarget", needTarget)
+    ns:Set("hideOutOfCombat", needCombat)
+    targetExists = target
+    H.fire("PLAYER_TARGET_CHANGED")
+    H.fire(combat and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
+    inVehicle = vehicle
+    H.fire(vehicle and "UNIT_ENTERED_VEHICLE" or "UNIT_EXITED_VEHICLE", "player")
+    local want = not locked or (not vehicle and (not needTarget or target) and (not needCombat or combat))
+    if f:IsShown() ~= want or f.mover:IsShown() ~= not locked or f._mouse ~= not locked then
+        wrong[#wrong + 1] = ("locked %s, hide without target %s, hide out of combat %s, target %s, combat %s, vehicle %s")
+            :format(tostring(locked), tostring(needTarget), tostring(needCombat), tostring(target),
+                tostring(combat), tostring(vehicle))
     end
 end
-check(#wrong == 0, "shown while unlocked, otherwise as the target and combat settings say: 32 cases"
-    .. (#wrong > 0 and (" (wrong: " .. table.concat(wrong, "; ") .. ")") or ""))
+check(#wrong == 0, "shown while unlocked; otherwise hidden in a vehicle and as the target and combat settings say: "
+    .. "64 cases" .. (#wrong > 0 and (" (wrong: " .. table.concat(wrong, "; ") .. ")") or ""))
 ns:Set("locked", true)
 ns:Set("hideWithoutTarget", false)
 ns:Set("hideOutOfCombat", false)
 targetExists = true
 H.fire("PLAYER_TARGET_CHANGED")
 H.fire("PLAYER_REGEN_ENABLED")
+inVehicle = false
+H.fire("UNIT_EXITED_VEHICLE", "player")
+H.fire("UNIT_ENTERED_VEHICLE", "party1")
+check(f:IsShown(), "a party member's vehicle changes nothing")
 noErrors("no errors in the visibility cases")
 
 ------------------------------------------------------------------------------ layout
@@ -532,6 +536,34 @@ H.fire("PLAYER_REGEN_ENABLED")
 check(not f:IsShown(), "combat over: hidden")
 inCombat = false
 noErrors("no errors reloading in combat")
+
+------------------------------------------------------------------------------ vehicles
+-- In a vehicle the player's own combo points don't apply, so the bar hides (GR-L4).
+print("== a reload in a vehicle")
+inVehicle = true
+gRogueDB = nil
+ns = session()
+f = ns.frame
+H.fire("PLAYER_ENTERING_WORLD")
+check(not f:IsShown(), "in a vehicle from the first frame: hidden")
+inVehicle = false
+H.fire("UNIT_EXITED_VEHICLE", "player")
+check(f:IsShown(), "out of it: shown")
+noErrors("no errors reloading in a vehicle")
+
+print("== a client without the vehicle events")
+missingEvents.UNIT_ENTERED_VEHICLE, missingEvents.UNIT_EXITED_VEHICLE = true, true
+ns = session()
+f = ns.frame
+H.fire("PLAYER_ENTERING_WORLD")
+check(said("could not register UNIT_ENTERED_VEHICLE") and said("could not register UNIT_EXITED_VEHICLE"),
+    "it says it can't follow vehicles")
+comboPoints = 3
+H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+check(f:IsShown() and allBars(pipsOf(f), 3), "and the bar works without them")
+newErrors()   -- the two lines above
+missingEvents.UNIT_ENTERED_VEHICLE, missingEvents.UNIT_EXITED_VEHICLE = nil, nil
+comboPoints = 0
 
 ------------------------------------------------------------------------------ a broken save
 -- A saved value of the wrong type, past its slider's range, off its list, or a colour

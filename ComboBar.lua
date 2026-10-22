@@ -185,7 +185,8 @@ function ns:UpdateVisibility()
     frame.moverLabel:SetShown(unlocked)
 
     local shown = unlocked
-        or ((not db.hideWithoutTarget or UnitExists("target"))
+        or (not self.inVehicle
+            and (not db.hideWithoutTarget or UnitExists("target"))
             and (not db.hideOutOfCombat or self.inCombat))
     frame:SetShown(shown)
 end
