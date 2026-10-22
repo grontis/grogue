@@ -1,4 +1,4 @@
--- gkit Widgets.lua @ db2bf7a: edit gkit, not this copy
+-- gkit Widgets.lua @ c3e3a16: edit gkit, not this copy
 -- Widgets.lua -- the controls a settings panel is made of, in one look.
 --
 -- Needs Kit/Init.lua and Kit/Theme.lua (Kit/Fonts.lua too when the panel font is an addon's file).
@@ -39,7 +39,8 @@
 --                             row.slider, row.valueText
 --   Swatch(parent, spec)      spec: label, tip, form ("hex" | "rgb"), get, onChange; row:SetColor
 --                             (r, g, b), row:SetHex(hex)
---   StyleButton(button, text [, primary]), Button(parent, text, onClick [, width, primary])
+--   StyleButton(button, text [, primary]), Button(parent, text, onClick [, width, primary]),
+--   Press(button, label)      the label sinks a pixel while the button is held
 --   ModeButton(parent, spec)  spec: start, stop, tip, tipBelow, onChange(on) -> on; SetOn,
 --                             SetAvailable
 --   Chevron(parent)
@@ -844,6 +845,7 @@ local function Press(button, label)
     button:SetScript("OnMouseDown", function() label:SetPoint("CENTER", button, "CENTER", 0, -1) end)
     button:SetScript("OnMouseUp", function() label:SetPoint("CENTER", button, "CENTER", 0, 0) end)
 end
+Widgets.Press = Press
 
 -- Dresses a Button in the theme without touching its OnClick, so it can dress a button made from
 -- a template whose click handler must stay Blizzard's (Kit/ReloadDialog.lua).
