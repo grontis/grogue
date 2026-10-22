@@ -1,7 +1,7 @@
 -- UI/Options.lua -- the settings window.
 --
 -- A standalone window rather than a page in Blizzard's settings, for the reasons in
--- UI/Widgets.lua. Opened by /grogue and from the addon compartment; Escape closes it.
+-- Kit/Widgets.lua. Opened by /grogue and from the addon compartment; Escape closes it.
 -- Every change applies immediately.
 
 local addonName, ns = ...
