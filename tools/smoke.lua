@@ -94,6 +94,19 @@ local function allBars(pips, value)
     return true
 end
 
+-- Whether every pip's reveal bar got ease and its visible bar snap as SetValue's
+-- interpolation; with neither, whether SetValue got the count alone.
+local function modes(pips, ease, snap)
+    local args = ease == nil and 1 or 2
+    for _, pip in ipairs(pips) do
+        if pip.reveal._args ~= args or pip.bar._args ~= args
+            or pip.reveal._interp ~= ease or pip.bar._interp ~= snap then
+            return false
+        end
+    end
+    return true
+end
+
 -- The panel's control, or button, whose label reads text.
 local function control(text)
     for _, f in ipairs(H.created) do
@@ -153,7 +166,7 @@ check(placed, "pips left to right, 34 px apart")
 check(f:IsShown() and f._mouse == false and not f.mover:IsShown() and not f.moverLabel:IsShown(),
     "locked: shown, no mouse, no mover")
 check(allBars(pips, 0), "a count of 0 reaches every bar")
-check(pips[1].reveal._interp == 1 and pips[1].bar._interp == 0, "smooth fill (the default): the reveal eases, the bar snaps")
+check(modes(pips, 1, 0), "smooth fill (the default): every reveal bar eases, every visible bar snaps")
 local structure = true
 for k, pip in ipairs(pips) do
     local clip = pip.bar._parent
@@ -199,11 +212,11 @@ check(f._points.CENTER.x == 20 and f._points.CENTER.y == -50 and f._scale == 2,
 check(f:IsShown() and f._mouse == true and f.mover:IsShown() and f.moverLabel:IsShown(),
     "unlocked: shown, mouse on, mover and label shown")
 check(allBars(pips, 3), "while unlocked every bar previews 3 points")
-check(pips[1].reveal._interp == 0 and pips[1].bar._interp == 0, "smooth fill off: both bars snap")
+check(modes(pips, 0, 0), "smooth fill off: both bars snap")
 check(not pips[1].border.left:IsShown() and pips[1].bar._points.TOPLEFT.x == 0, "no border: hidden, the bars not inset")
 check(pips[1].bar._fill._texture == ns.textures.flat.path, "a texture this version does not know draws as flat")
 ns:Set("smooth", true)
-check(pips[1].reveal._interp == 1 and pips[1].bar._interp == 0, "smooth fill on: the reveal eases, the bar snaps")
+check(modes(pips, 1, 0), "smooth fill on: the reveal eases, the bar snaps")
 ns:Set("border", true)
 check(pips[1].border.left:IsShown() and pips[1].bar._points.TOPLEFT.x == 1, "border on: shown, the bars inset")
 
@@ -449,20 +462,32 @@ inCombat = false
 noErrors("no errors reloading in combat")
 
 ------------------------------------------------------------------------------ no interpolation
-print("== a client without StatusBarInterpolation")
+-- SetValue's interpolation can't be nil, so a client without the enum, or without either
+-- member, must get a bar that snaps with the count as SetValue's only argument, and no
+-- smooth fill check, rather than an error at every update with smooth fill on (GR-M1).
 local Interpolation = Enum.StatusBarInterpolation
-Enum.StatusBarInterpolation = nil
-gRogueDB = nil
-ns = session()
-check(ns.canSmooth == false, "no smooth fill on offer")
-H.fire("PLAYER_ENTERING_WORLD")
-comboPoints = "secret"
-H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
-check(allBars(pipsOf(ns.frame), "secret"), "the count still reaches every bar")
-noErrors("no errors at an update")
-SlashCmdList.GROGUE("config")
-check(gRogueOptions:IsShown() and control("Smooth fill") == nil, "the panel opens, without the smooth fill check")
-noErrors("no errors in the panel")
+local clients = {
+    { "a client without StatusBarInterpolation", nil },
+    { "a client without StatusBarInterpolation.ExponentialEaseOut", { Immediate = 0 } },
+    { "a client without StatusBarInterpolation.Immediate", { ExponentialEaseOut = 1 } },
+}
+for _, client in ipairs(clients) do
+    print("== " .. client[1])
+    Enum.StatusBarInterpolation = client[2]
+    gRogueDB = nil   -- smooth fill on, the default
+    comboPoints = 0
+    ns = session()
+    check(ns.canSmooth == false, "no smooth fill on offer")
+    H.fire("PLAYER_ENTERING_WORLD")
+    comboPoints = "secret"
+    H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+    local bare = pipsOf(ns.frame)
+    check(allBars(bare, "secret") and modes(bare, nil, nil), "the count reaches every bar, as SetValue's only argument")
+    noErrors("no errors at an update")
+    SlashCmdList.GROGUE("config")
+    check(gRogueOptions:IsShown() and control("Smooth fill") == nil, "the panel opens, without the smooth fill check")
+    noErrors("no errors in the panel")
+end
 Enum.StatusBarInterpolation = Interpolation
 comboPoints = 0
 

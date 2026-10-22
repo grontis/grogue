@@ -160,8 +160,17 @@ function Loose:GetText() return self._text end
 function Loose:SetFont(path, size, flags) self._font = { path, size, flags } end
 
 function Loose:SetMinMaxValues(lo, hi) self._min, self._max = lo, hi end
-function Loose:SetValue(value, interpolation)
-    self._value, self._interp = value, interpolation
+-- StatusBar:SetValue(value, interpolation): the interpolation is a StatusBarInterpolation,
+-- Nilable = false with a default of Immediate (Forever's SimpleStatusBarAPIDocumentation).
+-- A call may leave it out. Whether the client takes an explicit nil as the default is
+-- unmeasured, so the stub refuses one, the stricter reading.
+function Loose:SetValue(...)
+    local value, interpolation = ...
+    local count = select("#", ...)
+    if self._type == "StatusBar" and count >= 2 and type(interpolation) ~= "number" then
+        error("SetValue(): bad argument #2 (StatusBarInterpolation expected, got " .. type(interpolation) .. ")", 2)
+    end
+    self._value, self._interp, self._args = value, interpolation, count
     self._secret = issecretvalue(value) or nil
     if self._OnValueChanged then self._OnValueChanged(self, value) end
 end

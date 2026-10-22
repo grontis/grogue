@@ -3,9 +3,15 @@ local addonName, ns = ...
 -- Shown while unlocked so both filled and empty styling are visible.
 local PREVIEW_POINTS = 3
 
--- SetValue's optional second argument, for animated fills.
+-- SetValue's optional second argument, for animated fills. Both members are looked up
+-- once, here: the argument can't be nil, so a member this build lacks would make every
+-- update raise. Without both the bar doesn't animate, and SetValue gets the count alone,
+-- which snaps (the client's default, Immediate).
 local Interpolation = Enum.StatusBarInterpolation
-ns.canSmooth = Interpolation ~= nil
+local EASE = Interpolation and Interpolation.ExponentialEaseOut
+local SNAP = Interpolation and Interpolation.Immediate
+local canSmooth = EASE ~= nil and SNAP ~= nil
+ns.canSmooth = canSmooth
 
 local frame
 local pips = {}
@@ -181,13 +187,17 @@ function ns:UpdatePoints()
         points = GetComboPoints("player", "target")
     end
 
-    -- nil only on a client without interpolation, where SetValue takes one argument.
-    local ease = Interpolation
-        and (self.db.smooth and Interpolation.ExponentialEaseOut or Interpolation.Immediate)
-    local snap = Interpolation and Interpolation.Immediate
+    if not canSmooth then
+        for _, pip in ipairs(pips) do
+            pip.reveal:SetValue(points)
+            pip.bar:SetValue(points)
+        end
+        return
+    end
+    local ease = self.db.smooth and EASE or SNAP
     for _, pip in ipairs(pips) do
         pip.reveal:SetValue(points, ease)
-        pip.bar:SetValue(points, snap)
+        pip.bar:SetValue(points, SNAP)
     end
 end
 
