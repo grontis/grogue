@@ -1,4 +1,4 @@
--- gkit Config.lua @ db2bf7a: edit gkit, not this copy
+-- gkit Config.lua @ f0ef885: edit gkit, not this copy
 -- Config.lua -- settings: defaults, what was saved, validated, into one live set.
 --
 --   ns.kit.config.defaults  ->  <ns.kit.db>.settings (SavedVariables), the values that differ only
@@ -17,7 +17,7 @@
 --   store        false: the addon keeps its own save and uses only Valid and ValidEntry; no
 --                loading or saving happens here. Otherwise the settings live in <db>.settings
 --   saved        function returning the table Set writes to, instead of <db>.settings (a profile
---                layer's hook, below)
+--                layer's hook, below). With it set, ADDON_LOADED leaves the save to the layer
 -- The fields are read when the settings are first used, so an addon may fill ns.kit.config in its
 -- own files (its defaults file), after the kit has loaded.
 --
@@ -28,6 +28,10 @@
 --   Reset(), ResetKeys(keys), Changed(), PendingReload(), NeedsReload()
 --   Apply(stored)        a whole stored set at once (a profile switch): every value first, then the
 --                        listeners of each that changed, then the any-listeners once
+--   Load(stored)         a whole stored set as what this session runs with (a profile chosen at
+--                        login, before anything is built from the settings): every value, checked
+--                        as at load, no listener told, nothing counted, and the reload keys'
+--                        values become what PendingReload measures against
 --   Loading()            true while Apply runs
 --   Valid(key, value) -> ok, why        the default's type, within limits, on the list, a colour
 --   ValidEntry(key, k, v) -> ok         an entry of a table setting: the default entry's shape, a
@@ -45,10 +49,12 @@
 -- entry without the default entry's shape keeps the default one; a colour is checked whole, so a
 -- partial one is replaced whole.
 --
--- Profiles are not here. A profile layer would sit on top: point ns.kit.config.saved at the
--- profile in use (a table of values that differ), and on a switch call Config.Apply(that table),
--- which notifies every listener of a setting that changed; prune each stored profile with
--- Valid/ValidEntry at load as this file prunes <db>.settings. gFrames keeps its own layer for now.
+-- Profiles are not here; a profile layer sits on top (gFrames' Config/Config.lua). It points
+-- ns.kit.config.saved at the profile in use (a table of values that differ), so Set and Reset
+-- write there; at ADDON_LOADED this file then records ns.dbLoaded and touches nothing else, since
+-- the layer carries over and prunes each stored profile itself (with Valid/ValidEntry, as this file
+-- prunes <db>.settings); the layer loads the profile in use with Config.Load and switches with
+-- Config.Apply, which notifies every listener of a setting that changed.
 --
 -- Client facts (gkit's facts/forever-client-facts.md): saved globals are assigned after the files
 -- run and before ADDON_LOADED (CF-073), so the save is read there and the global is read at call
@@ -409,8 +415,15 @@ function Config.Apply(stored)
     end
 end
 
--- Reload keys whose value differs from the one this session started with, sorted. Setting one
--- back takes it off the list.
+-- A stored set as this session's own: what the load at ADDON_LOADED does, for a layer that picks
+-- the set later (a profile, at login). Nothing is told, nothing is counted, nothing is saved.
+function Config.Load(stored)
+    if not built then build() end
+    load(type(stored) == "table" and stored or {})
+end
+
+-- Reload keys whose value differs from the one this session started with (or Load set), sorted.
+-- Setting one back takes it off the list.
 function Config.PendingReload()
     if not built then build() end
     local keys = {}
@@ -470,7 +483,8 @@ end
 
 -- SavedVariables are assigned just before this addon's ADDON_LOADED (CF-073). The settings this
 -- version can use stay; the rest leave the save and Config.dropped names them. Everything else at
--- the top of the save is left as it was.
+-- the top of the save is left as it was. With a profile layer (saved), the save is the layer's:
+-- only ns.dbLoaded is recorded here.
 Init.On("ADDON_LOADED", function(_, name)
     if name ~= addonName then
         return
@@ -481,6 +495,9 @@ Init.On("ADDON_LOADED", function(_, name)
     end
     local old = _G[ns.kit.db]
     ns.dbLoaded = type(old) == "table"
+    if spec.saved then
+        return
+    end
     local stored = {}
     if ns.dbLoaded and type(old.settings) == "table" then
         stored = old.settings
