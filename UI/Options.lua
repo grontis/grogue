@@ -1,8 +1,8 @@
 -- UI/Options.lua -- the settings window.
 --
--- A standalone window rather than a page in Blizzard's settings, because this client has
--- no Settings API (see UI/Widgets.lua). Opened by /grogue and from the addon compartment;
--- Escape closes it. Every change applies immediately.
+-- A standalone window rather than a page in Blizzard's settings, for the reasons in
+-- UI/Widgets.lua. Opened by /grogue and from the addon compartment; Escape closes it.
+-- Every change applies immediately.
 
 local addonName, ns = ...
 
@@ -108,8 +108,8 @@ local function build()
     panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
-    panel:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    panel:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    panel:SetScript("OnDragStart", ns.Guard(function(self) self:StartMoving() end))
+    panel:SetScript("OnDragStop", ns.Guard(function(self) self:StopMovingOrSizing() end))
     panel:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
     panel:Hide()
 

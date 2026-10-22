@@ -1,13 +1,15 @@
 -- UI/Widgets.lua -- the controls the settings panel is made of.
 --
--- Copied from gFrames' UI/Widgets.lua (itself adapted from gThreat's), so the g-addons
--- share one look; how each control behaves is gFrames' docs/ui.md. Only the accent and
--- the font lookup differ.
+-- Copied from gFrames' UI/Widgets.lua as it was on 2026-10-03 (itself adapted from
+-- gThreat's), so the g-addons share one look; how each control behaves is gFrames'
+-- docs/ui.md. Only the accent and the font lookup differ. The two are not linked:
+-- gFrames' copy has moved on since, and a fix to one is a fix to that one only.
 --
 -- Built from core widget types (Frame, Button, Slider) and plain textures, with no
--- Blizzard template. This client has no Settings API at all, and Blizzard's options
--- templates (UICheckButtonTemplate, OptionsSliderTemplate, ...) fail to create here.
--- The one Blizzard piece is ColorPickerFrame behind the colour swatch.
+-- Blizzard template: Blizzard's options templates register with its settings manager in
+-- their OnLoad, and the failure mode is an entry in Blizzard's tree or a taint path
+-- between our settings and their panel. The one Blizzard piece is ColorPickerFrame behind
+-- the colour swatch.
 
 local addonName, ns = ...
 

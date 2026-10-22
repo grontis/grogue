@@ -470,6 +470,25 @@ SlashCmdList.GROGUE("bogus")
 check(last():find("/grogue %[config | unlock | lock | reset%]") ~= nil, "anything else: the usage")
 noErrors("no errors in /grogue")
 
+------------------------------------------------------------------------------ drag errors
+-- An error in a script on our own frames goes to the client's error frame, which is off by
+-- default, so the drag handlers print theirs like every other handler (GR-L5).
+print("== an error while dragging")
+local function contained(fn, frame, message)
+    H.failNext(fn == frame._OnDragStart and "StartMoving" or "StopMovingOrSizing", message)
+    local ok = pcall(fn, frame, "LeftButton")
+    return ok and said(message)
+end
+SlashCmdList.GROGUE("unlock")
+check(contained(f._OnDragStart, f, "bar drag refused"), "an error starting the bar's drag is printed, not thrown")
+check(contained(f._OnDragStop, f, "bar drop refused"), "an error dropping it is printed, not thrown")
+SlashCmdList.GROGUE("lock")
+SlashCmdList.GROGUE("config")
+check(contained(panel._OnDragStart, panel, "panel drag refused"), "an error starting the panel's drag is printed, not thrown")
+check(contained(panel._OnDragStop, panel, "panel drop refused"), "an error dropping it is printed, not thrown")
+SlashCmdList.GROGUE("config")
+newErrors()   -- the four above
+
 ------------------------------------------------------------------------------ the compartment
 print("== the addon compartment")
 local declared = {}

@@ -89,14 +89,18 @@ function ns:CreateComboBar()
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function(self)
+    -- Guarded like the event handlers: the client's error frame is off by default, so an
+    -- error here would vanish, and the new position with it.
+    frame:SetScript("OnDragStart", ns.Guard(function(self)
+        self:StartMoving()
+    end))
+    frame:SetScript("OnDragStop", ns.Guard(function(self)
         self:StopMovingOrSizing()
         local point, _, relativePoint, x, y = self:GetPoint()
         local db = ns.db
         db.point, db.relativePoint = point, relativePoint
         db.x, db.y = x * db.scale, y * db.scale
-    end)
+    end))
 
     frame.mover = frame:CreateTexture(nil, "BACKGROUND")
     frame.mover:SetPoint("TOPLEFT", -4, 4)

@@ -212,7 +212,10 @@ function Loose:UnregisterEvent(event)
     if self._events then self._events[event] = nil end
 end
 
--- Every method call goes through here, so the stub sees each argument handed to the client.
+local failing = {}   -- method name -> the error its next call raises (the handle's failNext)
+
+-- Every method call goes through here, so the stub sees each argument handed to the client,
+-- and can make one call fail the way a refused client call would.
 local LOOSE_MT = {
     __index = function(_, key)
         local method = Loose[key]
@@ -223,6 +226,11 @@ local LOOSE_MT = {
             method = function() end
         end
         return function(self, ...)
+            local refusal = failing[key]
+            if refusal then
+                failing[key] = nil
+                error(refusal, 2)
+            end
             if key ~= "SetValue" then
                 for i = 1, select("#", ...) do
                     if issecretvalue((select(i, ...))) then
@@ -390,6 +398,7 @@ local function load()
     wipe(printed)
     wipe(leaks)
     wipe(readBacks)
+    wipe(failing)
     wipe(SlashCmdList)
     wipe(UISpecialFrames)
     calls.UnitPower = 0
@@ -435,6 +444,7 @@ return {
     leaks = leaks,
     readBacks = readBacks,
     calls = calls,
+    failNext = function(method, message) failing[method] = message end,
     loose = loose,
     secret = mksecret,
 }
