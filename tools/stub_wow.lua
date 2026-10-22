@@ -158,7 +158,19 @@ function Loose:SetTextColor(r, g, b, a) channels("SetTextColor", r, g, b, a); se
 
 function Loose:SetText(text) self._text = text end
 function Loose:GetText() return self._text end
-function Loose:SetFont(path, size, flags) self._font = { path, size, flags } end
+-- A font string's own SetFont of an addon's file returns false and the string keeps its font
+-- (CF-028: geconomy's probe on 70338 and 70374); only a font object takes the file, and gRogue
+-- makes none. Until 2026-10-22 this took any file (gkit's conformance F-STRING). Each refusal
+-- is counted in looseRefusedFonts for the smoke.
+looseRefusedFonts = 0
+function Loose:SetFont(path, size, flags)
+    if self._type == "FontString" and type(path) == "string" and path:lower():find("^interface[\\/]addons[\\/]") then
+        looseRefusedFonts = looseRefusedFonts + 1
+        return false
+    end
+    self._font = { path, size, flags }
+    return true
+end
 
 function Loose:SetMinMaxValues(lo, hi) self._min, self._max = lo, hi end
 -- StatusBar:SetValue(value, interpolation): the interpolation is a StatusBarInterpolation,

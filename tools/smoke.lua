@@ -686,5 +686,7 @@ check(#H.leaks == 0 and #H.readBacks == 0, "the secret went to SetValue and nowh
 GetComboPoints = GetComboPointsStub
 comboPoints = 0
 
+check((looseRefusedFonts or 0) == 0, "no font string asked SetFont for an addon's file, which the client refuses")
+
 print(("%d passed, %d failed"):format(passes, failures))
 os.exit(failures == 0 and 0 or 1)
