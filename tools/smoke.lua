@@ -1,6 +1,8 @@
 -- tools/smoke.lua -- load gRogue against tools/stub_wow.lua and check what it does: the
--- non-rogue path, settings over a save, the bar's layout and its secret count, dragging,
--- when the bar shows, the settings panel, /grogue and the addon compartment.
+-- non-rogue path, settings over a save and saves it can't use, the bar's layout and its
+-- secret count, dragging, when the bar shows, the settings panel, /grogue, the addon
+-- compartment, and clients without the interpolation enum or a member of it, without
+-- GetComboPoints or without the vehicle events.
 --
 --   luajit tools/smoke.lua .        (or tools/smoke.sh)
 --   SMOKE_VERBOSE=1 ... also prints the addon's chat output
