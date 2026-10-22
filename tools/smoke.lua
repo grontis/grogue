@@ -257,6 +257,7 @@ check(#H.leaks == 0 and #H.readBacks == 0, "it went to SetValue and nowhere else
 comboPoints = 4
 H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
 check(allBars(pips, 4), "a plain count reaches every bar too")
+check(H.calls.UnitPower == 0, "the count is GetComboPoints', not UnitPower's, while the client has it")
 
 ------------------------------------------------------------------------------ visibility
 print("== when the bar shows")
@@ -489,6 +490,27 @@ for _, client in ipairs(clients) do
     noErrors("no errors in the panel")
 end
 Enum.StatusBarInterpolation = Interpolation
+comboPoints = 0
+
+------------------------------------------------------------------------------ no GetComboPoints
+-- A build without GetComboPoints reads the player's combo point power instead, which lags
+-- a target change, rather than raising at every update (GR-L1).
+print("== a client without GetComboPoints")
+local GetComboPointsStub = GetComboPoints
+GetComboPoints = nil
+gRogueDB = nil
+ns = session()
+H.fire("PLAYER_ENTERING_WORLD")
+local fallback = pipsOf(ns.frame)
+comboPoints = "secret"
+H.fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+check(allBars(fallback, "secret") and H.calls.UnitPower > 0, "the count comes from UnitPower's combo points, a secret too")
+comboPoints = 2
+H.fire("PLAYER_TARGET_CHANGED")
+check(allBars(fallback, 2), "a plain count too")
+noErrors("no errors at an update")
+check(#H.leaks == 0 and #H.readBacks == 0, "the secret went to SetValue and nowhere else")
+GetComboPoints = GetComboPointsStub
 comboPoints = 0
 
 print(("%d passed, %d failed"):format(passes, failures))

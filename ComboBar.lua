@@ -13,6 +13,15 @@ local SNAP = Interpolation and Interpolation.Immediate
 local canSmooth = EASE ~= nil and SNAP ~= nil
 ns.canSmooth = canSmooth
 
+-- The count on the target. GetComboPoints is what Blizzard's own ComboFrame reads;
+-- UnitPower still reports the previous target's count when PLAYER_TARGET_CHANGED fires,
+-- so it is only the fallback for a build without GetComboPoints. For addon code either
+-- result is a secret: it may only be handed to a widget that accepts secrets, never
+-- compared, tested or used in arithmetic.
+local Read = GetComboPoints or function()
+    return UnitPower("player", Enum.PowerType.ComboPoints)
+end
+
 local frame
 local pips = {}
 
@@ -178,13 +187,10 @@ function ns:UpdateVisibility()
 end
 
 function ns:UpdatePoints()
-    -- GetComboPoints is what Blizzard's own ComboFrame reads; UnitPower still reports
-    -- the previous target's count when PLAYER_TARGET_CHANGED fires. For addon code the
-    -- result is a secret: it may only be handed to a widget that accepts secrets, never
-    -- compared, tested or used in arithmetic.
+    -- A secret for addon code (see Read): it goes to SetValue and nowhere else.
     local points = PREVIEW_POINTS
     if self.db.locked then
-        points = GetComboPoints("player", "target")
+        points = Read("player", "target")
     end
 
     if not canSmooth then

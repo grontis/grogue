@@ -265,6 +265,7 @@ STANDARD_TEXT_FONT = [[Fonts\FRIZQT__.TTF]]
 
 Enum = {
     StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 },
+    PowerType = { Energy = 3, ComboPoints = 4 },
 }
 
 strupper, strlower = string.upper, string.lower
@@ -313,6 +314,24 @@ comboPoints = 0
 function GetComboPoints(unit, target)
     if type(unit) ~= "string" or type(target) ~= "string" then
         error("GetComboPoints(): needs a unit and a target", 2)
+    end
+    if comboPoints == "secret" then
+        return mksecret()
+    end
+    return comboPoints
+end
+
+-- The same count through the player's power, a secret too when comboPoints says so. In
+-- the client it still reports the previous target's count when PLAYER_TARGET_CHANGED
+-- fires, which the stub doesn't model; it counts the reads instead.
+local calls = { UnitPower = 0 }
+function UnitPower(unit, powerType)
+    calls.UnitPower = calls.UnitPower + 1
+    if unit ~= "player" then
+        return 0
+    end
+    if powerType ~= Enum.PowerType.ComboPoints then
+        return 100
     end
     if comboPoints == "secret" then
         return mksecret()
@@ -373,6 +392,7 @@ local function load()
     wipe(readBacks)
     wipe(SlashCmdList)
     wipe(UISpecialFrames)
+    calls.UnitPower = 0
     ColorPickerFrame.info, ColorPickerFrame._shown = nil, false
     GameTooltip._owner, GameTooltip._lines, GameTooltip._shown = nil, nil, false
 
@@ -414,6 +434,7 @@ return {
     printed = printed,
     leaks = leaks,
     readBacks = readBacks,
+    calls = calls,
     loose = loose,
     secret = mksecret,
 }
