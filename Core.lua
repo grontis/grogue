@@ -71,30 +71,11 @@ ns.choices = {
 ----------------------------------------------------------------------------------
 -- output and error containment
 --
--- The client's error frame is off by default (/console scriptErrors 1), so an error in
--- one of our handlers would otherwise vanish. Each distinct error prints once.
+-- The kit's (Kit/Init.lua): ns.Print, and ns.Guard around every handler, script and
+-- command. The client's error frame is off by default (/console scriptErrors 1), so an
+-- error in one of our handlers would otherwise vanish: each distinct error prints once,
+-- up to the 50 kept (KitSetup.lua); past them errors are only counted.
 ----------------------------------------------------------------------------------
-
-local PREFIX = "|cfffff569gRogue|r: "
-
-function ns.Print(...)
-    print(PREFIX .. strjoin(" ", tostringall(...)))
-end
-
-local seenErrors = {}
-
-function ns.Guard(fn)
-    return function(...)
-        local ok, err = pcall(fn, ...)
-        if not ok then
-            err = tostring(err)
-            if not seenErrors[err] then
-                seenErrors[err] = true
-                ns.Print("|cffff5555error|r " .. err)
-            end
-        end
-    end
-end
 
 ----------------------------------------------------------------------------------
 -- settings
@@ -223,42 +204,17 @@ local function InVehicle()
     return UnitInVehicle and UnitInVehicle("player") or false
 end
 
-local events = CreateFrame("Frame")
-local handlers = {}
+-- The kit's event router (Kit/Init.lua): registration under pcall, since an event this
+-- build lacks throws on registration ("could not register" is printed, and the bar works
+-- without it); a unit passed is a RegisterUnitEvent; every handler guarded. A blocked or
+-- forbidden action is silent to Lua, so the kit says so if one names us.
+local On = ns.On
 
--- An event this build lacks throws on registration instead of returning an error.
-local function On(event, fn, unit)
-    local ok, err
-    if unit then
-        ok, err = pcall(events.RegisterUnitEvent, events, event, unit)
-    else
-        ok, err = pcall(events.RegisterEvent, events, event)
-    end
-    if not ok then
-        ns.Print("could not register " .. event .. ": " .. tostring(err))
-        return
-    end
-    handlers[event] = ns.Guard(fn)
-end
-
-events:SetScript("OnEvent", function(_, event, ...)
-    handlers[event](event, ...)
-end)
-
--- A blocked or forbidden action is silent to Lua, so say so if one names us.
-local function OnBlocked(event, blamed, func)
-    if blamed == addonName then
-        ns.Print("|cffff5555" .. event .. "|r " .. tostring(func))
-    end
-end
-On("ADDON_ACTION_BLOCKED", OnBlocked)
-On("ADDON_ACTION_FORBIDDEN", OnBlocked)
-
-On("ADDON_LOADED", function(_, name)
+local function OnAddonLoaded(_, name)
     if name ~= addonName then
         return
     end
-    events:UnregisterEvent("ADDON_LOADED")
+    ns.Off("ADDON_LOADED", OnAddonLoaded)
 
     -- SavedVariables are read just before this. A save that isn't a table, and a setting
     -- this version can't use, give way to the defaults, and say so.
@@ -321,7 +277,8 @@ On("ADDON_LOADED", function(_, name)
         ns.inVehicle = false
         ns:UpdateVisibility()
     end, "player")
-end)
+end
+On("ADDON_LOADED", OnAddonLoaded)
 
 ----------------------------------------------------------------------------------
 -- commands

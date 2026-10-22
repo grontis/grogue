@@ -1,0 +1,5 @@
+# Kit/MANIFEST.lock -- written by gkit's tools/sync.lua; gkit's tools/kit-lint.lua checks each
+# file in Kit/ against it. Edit gkit's runtime/ and sync again, never a copy here.
+# file <name> <git blob hash of the copy> <git blob hash of gkit's runtime file>
+gkit 0.1.0 db2bf7a
+file Init.lua 484a519ddfcaf66980a855e12ef34f19f86b84d5 8ee1b82374d1a9215b3c6c6008178a222c3b173c

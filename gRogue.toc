@@ -9,6 +9,12 @@
 ## AddonCompartmentFuncOnLeave: gRogue_OnAddonCompartmentLeave
 ## SavedVariables: gRogueDB
 
+# What gRogue tells the kit, then the kit: gkit's runtime, copied into Kit/ by gkit's
+# tools/sync.lua (never edited here; tools/smoke.sh lints it). A TOC change, a file added or
+# removed, needs a client restart, not a /reload.
+KitSetup.lua
+Kit/Init.lua
+
 Core.lua
 ComboBar.lua
 
