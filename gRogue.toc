@@ -14,6 +14,7 @@
 # removed, needs a client restart, not a /reload.
 KitSetup.lua
 Kit/Init.lua
+Kit/Config.lua
 
 Core.lua
 ComboBar.lua

@@ -68,6 +68,12 @@ ns.choices = {
     texture = ns.textureOrder,
 }
 
+-- The kit's Config checks saved values against these (KitSetup.lua: checking only, as gRogueDB
+-- stays gRogue's own).
+ns.kit.config.defaults = ns.defaults
+ns.kit.config.limits = ns.limits
+ns.kit.config.choices = ns.choices
+
 ----------------------------------------------------------------------------------
 -- output and error containment
 --
@@ -94,50 +100,11 @@ local function CopyDefaults(src, dst)
     end
 end
 
--- A colour as the picker gives it: r, g and b, each from 0 to 1.
-local function IsColor(value)
-    if type(value) ~= "table" then
-        return false
-    end
-    for _, channel in ipairs({ "r", "g", "b" }) do
-        local v = value[channel]
-        if type(v) ~= "number" or not (v >= 0 and v <= 1) then
-            return false
-        end
-    end
-    return true
-end
-
--- Whether a value is in the setting's range or on its list, for settings that have one.
--- A number without a range (an offset) must still be finite; NaN fails every comparison.
--- A table is a colour.
-local function allowed(key, value)
-    if type(value) == "number" then
-        local limits = ns.limits[key]
-        if limits then
-            return value >= limits[1] and value <= limits[2]
-        end
-        return value > -math.huge and value < math.huge
-    end
-    if type(value) == "table" then
-        return IsColor(value)
-    end
-    local choices = ns.choices[key]
-    if not choices then
-        return true
-    end
-    for _, choice in ipairs(choices) do
-        if choice == value then
-            return true
-        end
-    end
-    return false
-end
-
--- A saved value is used only if it has the default's type and is allowed.
-local function usable(key, value)
-    return type(value) == type(ns.defaults[key]) and allowed(key, value)
-end
+-- A saved value is used only if the kit's Config (Kit/Config.lua) allows it: the default's
+-- type, in the setting's range, on its list. A number without a range (an offset) must still be
+-- finite; NaN fails every comparison. A colour, as the picker gives it, has r, g and b, each a
+-- number from 0 to 1.
+local Config = ns.Config
 
 -- Drops each saved setting this version can't use, for CopyDefaults to fill like a missing
 -- one: one bad value (a hand edit, a half-written file, a key whose type changed) would
@@ -150,12 +117,12 @@ local function DropUnusable(saved)
         local bad = false
         if key == "pipColors" and type(value) == "table" then
             for i = 1, ns.MAX_POINTS do
-                if value[i] ~= nil and not IsColor(value[i]) then
+                if value[i] ~= nil and not Config.ValidEntry(key, i, value[i]) then
                     value[i] = nil
                     bad = true
                 end
             end
-        elseif value ~= nil and not usable(key, value) then
+        elseif value ~= nil and not Config.Valid(key, value) then
             saved[key] = nil
             bad = true
         end

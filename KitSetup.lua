@@ -14,4 +14,12 @@ ns.kit = {
     -- gRogue has no command that lists errors, so each error it keeps (50) prints in full, as
     -- every distinct error always has here; the kit's terse count line would point nowhere.
     printedErrors = 50,
+
+    -- Saved settings are checked by the kit's Config (Kit/Config.lua) and nothing more: gRogueDB
+    -- stays gRogue's own, every setting in it and its unknown keys left alone (store = false).
+    -- Core.lua hands it the defaults, limits and lists. A colour is { r, g, b }, each 0 to 1.
+    config = {
+        colours = "rgb",
+        store = false,
+    },
 }
