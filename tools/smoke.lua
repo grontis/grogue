@@ -122,6 +122,34 @@ local function near(a, b)
     return type(a) == "number" and math.abs(a - b) < 1e-9
 end
 
+local function copy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local out = {}
+    for k, v in pairs(value) do
+        out[k] = copy(v)
+    end
+    return out
+end
+
+local function same(a, b)
+    if type(a) ~= "table" or type(b) ~= "table" then
+        return a == b
+    end
+    for k, v in pairs(a) do
+        if not same(v, b[k]) then
+            return false
+        end
+    end
+    for k in pairs(b) do
+        if a[k] == nil then
+            return false
+        end
+    end
+    return true
+end
+
 ------------------------------------------------------------------------------ a warrior
 print("== a warrior")
 gRogueDB = nil
@@ -215,6 +243,8 @@ check(allBars(pips, 3), "while unlocked every bar previews 3 points")
 check(modes(pips, 0, 0), "smooth fill off: both bars snap")
 check(not pips[1].border.left:IsShown() and pips[1].bar._points.TOPLEFT.x == 0, "no border: hidden, the bars not inset")
 check(pips[1].bar._fill._texture == ns.textures.flat.path, "a texture this version does not know draws as flat")
+check(db.texture == "flat" and said("reset saved settings this version can't use: texture%.$"),
+    "and goes back to the default at load, which is said")
 ns:Set("smooth", true)
 check(modes(pips, 1, 0), "smooth fill on: the reveal eases, the bar snaps")
 ns:Set("border", true)
@@ -363,6 +393,28 @@ orientation.field:Click()
 orientation.items[1]:Click()
 check(db.orientation == "HORIZONTAL", "and back to Horizontal")
 check(control("Smooth fill") ~= nil, "smooth fill is on offer")
+-- A slider runs from end to end of its setting's limits, and a dropdown offers exactly its
+-- setting's list: what a save is held to (GR-M2).
+local spans = true
+for label, spec in pairs({
+    ["Point width"] = { "pipWidth", 1 }, ["Point height"] = { "pipHeight", 1 }, Spacing = { "spacing", 1 },
+    Scale = { "scale", 100 }, Opacity = { "alpha", 100 }, ["Empty opacity"] = { "emptyAlpha", 100 },
+    ["Border size"] = { "borderSize", 1 },
+}) do
+    local s, limits = control(label), ns.limits and ns.limits[spec[1]]
+    spans = spans and s ~= nil and limits ~= nil
+        and near(s.slider._min, limits[1] * spec[2]) and near(s.slider._max, limits[2] * spec[2])
+end
+check(spans, "each slider spans its setting's limits")
+local offers = true
+for label, key in pairs({ Orientation = "orientation", Texture = "texture" }) do
+    local d, choices = control(label), ns.choices and ns.choices[key]
+    offers = offers and d ~= nil and choices ~= nil and #d.items == #choices
+    for i, item in ipairs(offers and d.items or {}) do
+        offers = offers and item.option == choices[i]
+    end
+end
+check(offers, "each dropdown offers its setting's list")
 
 local swatch = control("Filled colour")
 check(swatch ~= nil and swatch.kind == "swatch", "the fill colour swatch")
@@ -461,6 +513,68 @@ H.fire("PLAYER_REGEN_ENABLED")
 check(not f:IsShown(), "combat over: hidden")
 inCombat = false
 noErrors("no errors reloading in combat")
+
+------------------------------------------------------------------------------ a broken save
+-- A saved value of the wrong type, past its slider's range, off its list, or a colour
+-- without numeric r, g and b goes back to its default at load, so one bad value can't
+-- break every layout refresh (GR-M2).
+print("== a save with values this version can't use")
+local NAN, INF = 0 / 0, 1 / 0
+gRogueDB = {
+    point = "MIDDLE", relativePoint = 3, x = INF, y = "low", locked = "no",
+    orientation = "DIAGONAL", reverse = 1, pipWidth = "wide", pipHeight = 500, spacing = -1,
+    scale = 0, alpha = NAN, texture = 7, smooth = "yes",
+    fillColor = { r = "red", g = 0, b = 0 }, emptyColor = true, emptyAlpha = 2,
+    border = {}, borderSize = 0.5, borderColor = { r = 2, g = 0, b = 0 },
+    usePipColors = "no", hideWithoutTarget = 0, hideOutOfCombat = "false",
+    pipColors = { { r = 0.1, g = 0.2, b = 0.3 }, true, { r = "x" }, "x", { r = 0, g = 0, b = NAN } },
+    bogus = 7,
+}
+ns = session()
+db = ns.db
+local back, keys = {}, {}
+for key, default in pairs(ns.defaults) do
+    keys[#keys + 1] = key
+    if key ~= "pipColors" and not same(db[key], default) then
+        back[#back + 1] = key
+    end
+end
+table.sort(keys)
+check(#back == 0, "every setting is back to its default" .. (#back > 0 and (", but not " .. table.concat(back, ", ")) or ""))
+local defaultPips = ns.defaults.pipColors
+check(same(db.pipColors[1], { r = 0.1, g = 0.2, b = 0.3 }) and same(db.pipColors[2], defaultPips[2])
+    and same(db.pipColors[3], defaultPips[3]) and same(db.pipColors[4], defaultPips[4])
+    and same(db.pipColors[5], defaultPips[5]), "each point's colour is checked on its own: the good one kept")
+check(db.bogus == 7, "a key this version does not know is left alone")
+check(said("reset saved settings this version can't use: " .. table.concat(keys, ", ") .. "%.$"), "and it says which")
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors laying out the bar")
+f = ns.frame
+at = f and f._points and f._points.CENTER
+check(at ~= nil and at.x == 0 and at.y == -180 and f._scale == 1 and f._width == 166 and f._height == 12,
+    "the bar is drawn as by default")
+
+print("== a save at the ends of every range")
+local ends = copy(ns.defaults)
+ends.point, ends.relativePoint, ends.x, ends.y = "BOTTOMRIGHT", "TOPLEFT", -1234.5, 0
+ends.pipWidth, ends.pipHeight, ends.spacing, ends.scale = 4, 100, 0, 0.5
+ends.alpha, ends.emptyAlpha, ends.borderSize, ends.locked = 0.1, 0, 6, false
+ends.orientation, ends.texture, ends.fillColor = "VERTICAL", "raid", { r = 0, g = 1, b = 0 }
+gRogueDB = copy(ends)
+ns = session()
+check(same(ns.db, ends) and not said("can't use"), "every value kept, nothing said")
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors laying out the bar")
+at = ns.frame._points.BOTTOMRIGHT
+check(at ~= nil and at.x == -2469 and at.relPoint == "TOPLEFT" and ns.frame._scale == 0.5, "drawn where it was saved")
+
+print("== a save that is not a table")
+gRogueDB = "corrupt"
+ns = session()
+check(type(gRogueDB) == "table" and ns.db == gRogueDB and same(gRogueDB, ns.defaults), "the defaults, in a new table")
+check(ns.frame ~= nil and said("saved settings unreadable; using the defaults%."), "the bar is made, and it says so")
+H.fire("PLAYER_ENTERING_WORLD")
+noErrors("no errors")
 
 ------------------------------------------------------------------------------ no interpolation
 -- SetValue's interpolation can't be nil, so a client without the enum, or without either

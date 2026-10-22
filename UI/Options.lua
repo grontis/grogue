@@ -20,7 +20,6 @@ local COLUMN = 230
 local GUTTER = 24
 local WIDTH = PAD * 2 + COLUMN * 2 + GUTTER
 
-local ORIENTATIONS = { "HORIZONTAL", "VERTICAL" }
 local ORIENTATION_NAMES = { HORIZONTAL = "Horizontal", VERTICAL = "Vertical" }
 
 local TEXTURE_NAMES = {}
@@ -58,10 +57,13 @@ local function check(col, key, label)
     controls[key] = control
 end
 
--- A percent slider shows 0-100 and stores 0-1.
-local function slider(col, key, label, min, max, step, isPercent)
+-- A slider runs from end to end of its setting's limits (ns.limits), which a saved value is
+-- held to as well. A percent slider shows 0-100 and stores 0-1.
+local function slider(col, key, label, step, isPercent)
+    local limits, unit = ns.limits[key], isPercent and 100 or 1
     local control = col.place(Widgets.Slider(panel, {
-        label = label, min = min, max = max, step = step,
+        label = label, step = step,
+        min = math.floor(limits[1] * unit + 0.5), max = math.floor(limits[2] * unit + 0.5),
         format = isPercent and percent or nil,
         onChange = function(v) ns:Set(key, isPercent and v / 100 or v) end,
     }))
@@ -134,28 +136,28 @@ local function build()
     check(left, "locked", "Lock position")
 
     left.place(Widgets.Heading(panel, "Layout"), 6)
-    dropdown(left, "orientation", "Orientation", ORIENTATIONS, ORIENTATION_NAMES)
+    dropdown(left, "orientation", "Orientation", ns.choices.orientation, ORIENTATION_NAMES)
     check(left, "reverse", "Reverse direction")
-    slider(left, "pipWidth", "Point width", 4, 100, 1)
-    slider(left, "pipHeight", "Point height", 4, 100, 1)
-    slider(left, "spacing", "Spacing", 0, 30, 1)
-    slider(left, "scale", "Scale", 50, 200, 5, true)
-    slider(left, "alpha", "Opacity", 10, 100, 5, true)
+    slider(left, "pipWidth", "Point width", 1)
+    slider(left, "pipHeight", "Point height", 1)
+    slider(left, "spacing", "Spacing", 1)
+    slider(left, "scale", "Scale", 5, true)
+    slider(left, "alpha", "Opacity", 5, true)
 
     left.place(Widgets.Heading(panel, "Visibility"), 6)
     check(left, "hideWithoutTarget", "Hide without a target")
     check(left, "hideOutOfCombat", "Hide out of combat")
 
     right.place(Widgets.Heading(panel, "Style"))
-    dropdown(right, "texture", "Texture", ns.textureOrder, TEXTURE_NAMES)
+    dropdown(right, "texture", "Texture", ns.choices.texture, TEXTURE_NAMES)
     if ns.canSmooth then
         check(right, "smooth", "Smooth fill")
     end
     swatch(right, "fillColor", "Filled colour", function() return db.fillColor end)
     swatch(right, "emptyColor", "Empty colour", function() return db.emptyColor end)
-    slider(right, "emptyAlpha", "Empty opacity", 0, 100, 5, true)
+    slider(right, "emptyAlpha", "Empty opacity", 5, true)
     check(right, "border", "Show border")
-    slider(right, "borderSize", "Border size", 1, 6, 1)
+    slider(right, "borderSize", "Border size", 1)
     swatch(right, "borderColor", "Border colour", function() return db.borderColor end)
 
     right.place(Widgets.Heading(panel, "Point colours"), 6)

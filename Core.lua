@@ -45,6 +45,29 @@ ns.defaults = {
     hideOutOfCombat = false,
 }
 
+-- Each number's range, which its slider spans (UI/Options.lua shows a percent's times
+-- 100). Saved values are held to it too.
+ns.limits = {
+    pipWidth = { 4, 100 },
+    pipHeight = { 4, 100 },
+    spacing = { 0, 30 },
+    scale = { 0.5, 2 },
+    alpha = { 0.1, 1 },
+    emptyAlpha = { 0, 1 },
+    borderSize = { 1, 6 },
+}
+
+-- Settings limited to a list of values. A dropdown offers exactly its list.
+local ANCHORS = {
+    "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
+}
+ns.choices = {
+    point = ANCHORS,
+    relativePoint = ANCHORS,
+    orientation = { "HORIZONTAL", "VERTICAL" },
+    texture = ns.textureOrder,
+}
+
 ----------------------------------------------------------------------------------
 -- output and error containment
 --
@@ -88,6 +111,79 @@ local function CopyDefaults(src, dst)
             dst[key] = value
         end
     end
+end
+
+-- A colour as the picker gives it: r, g and b, each from 0 to 1.
+local function IsColor(value)
+    if type(value) ~= "table" then
+        return false
+    end
+    for _, channel in ipairs({ "r", "g", "b" }) do
+        local v = value[channel]
+        if type(v) ~= "number" or not (v >= 0 and v <= 1) then
+            return false
+        end
+    end
+    return true
+end
+
+-- Whether a value is in the setting's range or on its list, for settings that have one.
+-- A number without a range (an offset) must still be finite; NaN fails every comparison.
+-- A table is a colour.
+local function allowed(key, value)
+    if type(value) == "number" then
+        local limits = ns.limits[key]
+        if limits then
+            return value >= limits[1] and value <= limits[2]
+        end
+        return value > -math.huge and value < math.huge
+    end
+    if type(value) == "table" then
+        return IsColor(value)
+    end
+    local choices = ns.choices[key]
+    if not choices then
+        return true
+    end
+    for _, choice in ipairs(choices) do
+        if choice == value then
+            return true
+        end
+    end
+    return false
+end
+
+-- A saved value is used only if it has the default's type and is allowed.
+local function usable(key, value)
+    return type(value) == type(ns.defaults[key]) and allowed(key, value)
+end
+
+-- Drops each saved setting this version can't use, for CopyDefaults to fill like a missing
+-- one: one bad value (a hand edit, a half-written file, a key whose type changed) would
+-- otherwise break every layout refresh. A point's colour is checked on its own. Returns
+-- the names dropped, sorted.
+local function DropUnusable(saved)
+    local dropped = {}
+    for key in pairs(ns.defaults) do
+        local value = saved[key]
+        local bad = false
+        if key == "pipColors" and type(value) == "table" then
+            for i = 1, ns.MAX_POINTS do
+                if value[i] ~= nil and not IsColor(value[i]) then
+                    value[i] = nil
+                    bad = true
+                end
+            end
+        elseif value ~= nil and not usable(key, value) then
+            saved[key] = nil
+            bad = true
+        end
+        if bad then
+            dropped[#dropped + 1] = key
+        end
+    end
+    table.sort(dropped)
+    return dropped
 end
 
 -- Sliders report every pixel of a drag, most of which snap to the value already set.
@@ -159,7 +255,17 @@ On("ADDON_LOADED", function(_, name)
     end
     events:UnregisterEvent("ADDON_LOADED")
 
+    -- SavedVariables are read just before this. A save that isn't a table, and a setting
+    -- this version can't use, give way to the defaults, and say so.
+    if gRogueDB ~= nil and type(gRogueDB) ~= "table" then
+        gRogueDB = nil
+        ns.Print("saved settings unreadable; using the defaults.")
+    end
     gRogueDB = gRogueDB or {}
+    local dropped = DropUnusable(gRogueDB)
+    if #dropped > 0 then
+        ns.Print("reset saved settings this version can't use: " .. table.concat(dropped, ", ") .. ".")
+    end
     CopyDefaults(ns.defaults, gRogueDB)
     ns.db = gRogueDB
 
