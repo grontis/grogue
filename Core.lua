@@ -12,14 +12,14 @@ ns.textureOrder = { "flat", "blizzard", "raid" }
 ns.defaults = {
     point = "CENTER",
     relativePoint = "CENTER",
-    x = 0,
-    y = -180,
+    x = 10.8,
+    y = -250.8,
     locked = true,
 
     orientation = "HORIZONTAL",
     reverse = false,
-    pipWidth = 30,
-    pipHeight = 12,
+    pipWidth = 50,
+    pipHeight = 25,
     spacing = 4,
     scale = 1,
     alpha = 1,
@@ -28,11 +28,11 @@ ns.defaults = {
     smooth = true,
     fillColor = { r = 1, g = 0.82, b = 0 },
     emptyColor = { r = 0, g = 0, b = 0 },
-    emptyAlpha = 0.5,
+    emptyAlpha = 0.35,
     border = true,
     borderSize = 1,
     borderColor = { r = 0, g = 0, b = 0 },
-    usePipColors = false,
+    usePipColors = true,
     pipColors = {
         { r = 1,   g = 0.9,  b = 0.2 },
         { r = 1,   g = 0.75, b = 0.15 },
@@ -41,8 +41,8 @@ ns.defaults = {
         { r = 0.9, g = 0.15, b = 0.1 },
     },
 
-    hideWithoutTarget = false,
-    hideOutOfCombat = false,
+    hideWithoutTarget = true,
+    hideOutOfCombat = true,
 }
 
 -- Each number's range, which its slider spans (UI/Options.lua shows a percent's times

@@ -183,18 +183,18 @@ check(#pips == 5, "five pips (" .. #pips .. ")")
 H.fire("PLAYER_ENTERING_WORLD")
 noErrors("no errors at PLAYER_ENTERING_WORLD")
 local at = f._points.CENTER
-check(at and at.rel == UIParent and at.relPoint == "CENTER" and at.x == 0 and at.y == -180
+check(at and at.rel == UIParent and at.relPoint == "CENTER" and at.x == 10.8 and at.y == -250.8
     and f._scale == 1 and f._alpha == 1, "at the default spot, scale 1, opaque")
-check(f._width == 5 * 30 + 4 * 4 and f._height == 12, "sized for five 30 x 12 pips 4 apart")
+check(f._width == 5 * 50 + 4 * 4 and f._height == 25, "sized for five 50 x 25 pips 4 apart")
 local placed = true
 for i, pip in ipairs(pips) do
     local tl = pip._points.TOPLEFT
-    placed = placed and tl ~= nil and tl.rel == f and tl.x == (i - 1) * 34 and tl.y == 0
-        and pip._width == 30 and pip._height == 12
+    placed = placed and tl ~= nil and tl.rel == f and tl.x == (i - 1) * 54 and tl.y == 0
+        and pip._width == 50 and pip._height == 25
 end
-check(placed, "pips left to right, 34 px apart")
-check(f:IsShown() and f._mouse == false and not f.mover:IsShown() and not f.moverLabel:IsShown(),
-    "locked: shown, no mouse, no mover")
+check(placed, "pips left to right, 54 px apart")
+check(not f:IsShown() and f._mouse == false and not f.mover:IsShown() and not f.moverLabel:IsShown(),
+    "locked: no mouse, no mover, and hidden with no target out of combat (the default)")
 check(allBars(pips, 0), "a count of 0 reaches every bar")
 check(modes(pips, 1, 0), "smooth fill (the default): every reveal bar eases, every visible bar snaps")
 local structure = true
@@ -212,8 +212,9 @@ local edge = pips[1].border
 check(edge.left._width == 1 and edge.top._height == 1 and edge.left:IsShown()
     and pips[1].bar._points.TOPLEFT.x == 1 and pips[1].bar._points.TOPLEFT.y == -1,
     "a 1 px border inside the pip, the bars inset by it")
-check(pips[1].bar._fill._texture == ns.textures.flat.path and near(pips[1].bar._barColor[2], 0.82)
-    and pips[1].bg._color[4] == 0.5, "flat texture, gold fill, empty at half opacity")
+check(pips[1].bar._fill._texture == ns.textures.flat.path and near(pips[1].bar._barColor[2], 0.9)
+    and near(pips[5].bar._barColor[2], 0.15) and pips[1].bg._color[4] == 0.35,
+    "flat texture, a colour for each point, empty at 35% opacity")
 noErrors("no errors for a new rogue")
 
 ------------------------------------------------------------------------------ a prior save
@@ -227,7 +228,7 @@ local db = ns.db
 check(db == gRogueDB and db.x == 40 and db.y == -100 and db.scale == 2, "saved values kept")
 check(db.locked == false and db.border == false and db.smooth == false,
     "a saved false is kept, not taken for a missing value")
-check(db.point == "CENTER" and db.spacing == 4 and db.hideOutOfCombat == false, "missing settings filled from the defaults")
+check(db.point == "CENTER" and db.spacing == 4 and db.hideOutOfCombat == true, "missing settings filled from the defaults")
 check(db.pipColors[1].r == 0.1 and db.pipColors[2].r == 1 and near(db.pipColors[2].g, 0.75),
     "point colours merged one by one")
 check(db.fillColor ~= ns.defaults.fillColor and db.pipColors[2] ~= ns.defaults.pipColors[2],
@@ -333,16 +334,16 @@ noErrors("no errors in the visibility cases")
 print("== layout")
 ns:Set("orientation", "VERTICAL")
 ns:Set("reverse", true)
-check(f._width == 30 and f._height == 5 * 12 + 4 * 4, "vertical: one pip wide, five high")
-check(pips[1]._points.BOTTOMLEFT.y == 4 * 16 and pips[5]._points.BOTTOMLEFT.y == 0, "vertical, reversed: pip 1 at the top")
+check(f._width == 50 and f._height == 5 * 25 + 4 * 4, "vertical: one pip wide, five high")
+check(pips[1]._points.BOTTOMLEFT.y == 4 * 29 and pips[5]._points.BOTTOMLEFT.y == 0, "vertical, reversed: pip 1 at the top")
 check(pips[1].bar._orientation == "VERTICAL" and pips[1].bar._reverse == true
     and pips[1].reveal._orientation == "VERTICAL" and pips[1].reveal._reverse == true,
     "both bars vertical and reversed, so the clip grows over the fill")
 ns:Set("reverse", false)
-check(pips[1]._points.BOTTOMLEFT.y == 0 and pips[5]._points.BOTTOMLEFT.y == 64, "vertical: pip 1 at the bottom")
+check(pips[1]._points.BOTTOMLEFT.y == 0 and pips[5]._points.BOTTOMLEFT.y == 116, "vertical: pip 1 at the bottom")
 ns:Set("orientation", "HORIZONTAL")
 ns:Set("reverse", true)
-check(pips[1]._points.TOPLEFT.x == 136 and pips[5]._points.TOPLEFT.x == 0, "horizontal, reversed: pip 1 at the right")
+check(pips[1]._points.TOPLEFT.x == 216 and pips[5]._points.TOPLEFT.x == 0, "horizontal, reversed: pip 1 at the right")
 ns:Set("reverse", false)
 ns:Set("pipWidth", 4)
 ns:Set("pipHeight", 4)
@@ -352,12 +353,13 @@ check(pips[1].border.left._width == 1 and pips[1].bar._points.TOPLEFT.x == 1,
 ns:Set("pipWidth", 30)
 ns:Set("pipHeight", 12)
 check(pips[1].border.left._width == 5, "in a 30 x 12 pip it clamps to 5")
+ns:Set("pipWidth", 50)
+ns:Set("pipHeight", 25)
 ns:Set("borderSize", 1)
-ns:Set("usePipColors", true)
 check(pips[1].bar._barColor[1] == 0.1 and pips[2].bar._barColor[1] == 1 and near(pips[2].bar._barColor[2], 0.75),
     "a colour for each point")
 ns:Set("usePipColors", false)
-check(pips[2].bar._barColor[1] == 1 and near(pips[2].bar._barColor[2], 0.82), "one fill colour again")
+check(pips[2].bar._barColor[1] == 1 and near(pips[2].bar._barColor[2], 0.82), "one fill colour")
 ns:Set("texture", "raid")
 check(pips[3].bar._fill._texture == ns.textures.raid.path, "the chosen texture")
 ns:Set("alpha", 0.5)
@@ -365,7 +367,7 @@ ns:Set("emptyAlpha", 0.25)
 check(f._alpha == 0.5 and pips[1].bg._color[4] == 0.25, "opacity and empty opacity")
 ns:Set("texture", "flat")
 ns:Set("alpha", 1)
-ns:Set("emptyAlpha", 0.5)
+ns:Set("emptyAlpha", 0.35)
 noErrors("no errors in layout")
 
 ------------------------------------------------------------------------------ the panel
@@ -543,7 +545,7 @@ noErrors("no errors reloading in combat")
 -- In a vehicle the player's own combo points don't apply, so the bar hides (GR-L4).
 print("== a reload in a vehicle")
 inVehicle = true
-gRogueDB = nil
+gRogueDB = { hideWithoutTarget = false, hideOutOfCombat = false }
 ns = session()
 f = ns.frame
 H.fire("PLAYER_ENTERING_WORLD")
@@ -610,7 +612,7 @@ H.fire("PLAYER_ENTERING_WORLD")
 noErrors("no errors laying out the bar")
 f = ns.frame
 at = f and f._points and f._points.CENTER
-check(at ~= nil and at.x == 0 and at.y == -180 and f._scale == 1 and f._width == 166 and f._height == 12,
+check(at ~= nil and at.x == 10.8 and at.y == -250.8 and f._scale == 1 and f._width == 266 and f._height == 25,
     "the bar is drawn as by default")
 
 print("== a save at the ends of every range")
