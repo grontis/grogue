@@ -1,10 +1,10 @@
--- gkit Widgets.lua @ c3e3a16: edit gkit, not this copy
+-- gkit Widgets.lua @ 3b70925: edit gkit, not this copy
 -- Widgets.lua -- the controls a settings panel is made of, in one look.
 --
 -- Needs Kit/Init.lua and Kit/Theme.lua (Kit/Fonts.lua too when the panel font is an addon's file).
--- gFrames' UI/Widgets.lua as of 2026-10-21 (the superset of the lineage: gThreat's first, gRogue's
--- of 2026-10-03, gBars' of 2026-10-19), with the font a parameter, the palette from the addon's
--- tokens and the colour swatch in both forms. How each control behaves is gFrames' docs/ui.md.
+-- gFrames' UI/Widgets.lua, the superset of the lineage (gThreat's first, then gRogue's and gBars'),
+-- with the font a parameter, the palette from the addon's tokens and the colour swatch in both
+-- forms. How each control behaves is gFrames' docs/SPEC.md, UI design rules, Controls.
 --
 -- Reads from ns.kit:
 --   tokens.panel   the palette (required; any token form Kit/Theme.lua reads): backdrop, header,

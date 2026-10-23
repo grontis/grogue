@@ -1,8 +1,8 @@
 # Kit/MANIFEST.lock -- written by gkit's tools/sync.lua; gkit's tools/kit-lint.lua checks each
 # file in Kit/ against it. Edit gkit's runtime/ and sync again, never a copy here.
 # file <name> <git blob hash of the copy> <git blob hash of gkit's runtime file>
-gkit 0.2.0 f0ef885
-file Init.lua b4b8d045b7330c97cb11bc0399dab982f9aa0ca3 0c00e1189e0d6fb98a78cbd21de871b684a0f46e
+gkit 0.3.0 3b70925
+file Init.lua bbc4c44b4c4e5c8b9b34e4c2f5546cf144bf53d4 fbb3794de72a0b7bfa6000e5e28f435b72d0b08c
 file Theme.lua 07830ba391472c3315d541f540f1654630353600 64edbb49e2e261671fe8aa9086a123715d39bb6d
-file Config.lua 28f771d84a9a39f80dfc044e519fdbb644f3f9cb 64d22a5dd35337914d163e685880936d83115839
-file Widgets.lua c125466433c80756e57fabf6328671a36feeb6bd d93bb7155b6758fbee6200472edc5f1aa753c435
+file Config.lua 2b1a30e7ad7e3287909feca20f78d246fdf8254b 9622125e12c1c372bce8c71002500a4cf099bf1c
+file Widgets.lua bfcfa09e3b988f192c24117eddfa2bbff00efb9e c30b6a339f071db1424a9d2e476d1be0fdd1831c

@@ -1,4 +1,4 @@
--- gkit Init.lua @ f0ef885: edit gkit, not this copy
+-- gkit Init.lua @ 3b70925: edit gkit, not this copy
 -- Init.lua -- gkit's core: output, error containment, the combat queue, events and diagnostics.
 --
 -- Vendored into <addon>/Kit/ by gkit's tools/sync.lua and listed in the TOC first among the kit's
@@ -20,7 +20,8 @@
 --   onError        function(key, message, stack): every error the kit catches or is handed goes to
 --                  the addon's own log instead of the kit's record (or first, with errors.record):
 --                  key is the guard's or TryPart's key, "On <event>" for a refused registration,
---                  nil for RecordError; message is the error as raised, as text, without the key;
+--                  nil for RecordError; message is the error as raised, as text, without the key
+--                  (an error that is secret, or whose text is, as "<secret error>", below);
 --                  stack is a string with errors.stack, else nil
 --   disableAfter   a guarded handler's failure budget: nil never disables (gFrames, gBars); a
 --                  number disables a key after that many failures until ns.Rearm (gThreat: 2)
@@ -47,7 +48,9 @@
 --   DisabledHandlers(), Rearm([key])  the keys a budget switched off; switch them (or one) on again
 --   RecordError(message)            record and print an error caught elsewhere
 --   errors, errorOrder, errorsDropped   message -> times seen; the first keptErrors distinct
---                                   messages; how many more distinct ones were only counted
+--                                   messages; how many more distinct ones were only counted.
+--                                   A message is never a secret: an error that is one, or whose
+--                                   text is one, is "<secret error>"
 --   errorStacks                     message -> its stack, with errors.stack
 --   TryPart(key, what, fn, ...)     an optional part: its error is recorded and noted once, and
 --                                   nil comes back instead of fn's result
@@ -85,6 +88,9 @@
 --
 -- Client facts relied on (gkit's facts/forever-client-facts.md): Lua errors are hidden by default
 -- and only about 100 a session reach a handler (CF-140), so errors are printed and budgeted;
+-- tostring and .. hand back a secret for a secret (CF-007) and a secret used as a table key throws
+-- (CF-009), so an error that is a secret, or whose text is, is recorded as a placeholder: the record
+-- keys a table by the error's text, and the guard must not throw;
 -- xpcall passes extra arguments (CF-141), so a guarded call builds no closure, and its handler
 -- runs where the error was raised, before the stack unwinds, which is where a stack is taken;
 -- registering an unknown event throws (CF-048), so registration is under pcall; the combat log is
@@ -108,7 +114,7 @@ if type(kit) ~= "table" then
     error("gkit: set ns.kit in a file the TOC loads before Kit/Init.lua", 0)
 end
 
-local Kit = { version = "0.2.0" }
+local Kit = { version = "0.3.0" }
 ns.Kit = Kit
 
 local pcall, xpcall, select, tostring, type, ipairs, pairs = pcall, xpcall, select, tostring, type, ipairs, pairs
@@ -196,6 +202,37 @@ local POINTER = pointer and (", " .. tostring(pointer)) or ""
 local errors, errorOrder, errorStacks = {}, {}, {}
 local errorsDropped = 0
 
+-- The text an error is recorded under, which is never a secret. On the client a secret's tostring
+-- and .. are secrets too (CF-007), and the record keys a table by the text, which throws for a
+-- secret (CF-009) and would make the guard itself throw. So an error that is secret, or whose
+-- tostring is, is SECRET_ERROR. One whose tostring throws, or answers something other than a
+-- string (a __tostring may), is NO_TEXT. Any other value reads as tostring reads it. The secret
+-- test is Kit/Secret.lua's IsSecret, which Init cannot need.
+local SECRET_ERROR = "<secret error>"
+local NO_TEXT = "<error without text>"
+
+local function isSecret(value)
+    local test = issecretvalue
+    return test ~= nil and test(value) == true
+end
+
+local function safeText(value)
+    if isSecret(value) then
+        return SECRET_ERROR
+    end
+    local ok, text = pcall(tostring, value)
+    if not ok then
+        return NO_TEXT
+    end
+    if isSecret(text) then
+        return SECRET_ERROR
+    end
+    if type(text) ~= "string" then
+        return NO_TEXT
+    end
+    return text
+end
+
 -- The kit's own record of one error.
 local function keep(message, stack)
     if errors[message] then
@@ -222,16 +259,17 @@ local function keep(message, stack)
 end
 
 -- Every error the kit catches or is handed comes here: to the addon's log, to the kit's record, or
--- to both. label, when given, goes in front of the recorded message ("key: error").
+-- to both. label, when given, goes in front of the recorded message ("key: error"). The error is
+-- made safe text first, before anything keys on it or joins it to other text.
 local function report(key, err, label, stack)
-    local message = tostring(err)
+    local message = safeText(err)
     local recorded = label and (label .. ": " .. message) or message
     if onError then
         local ok, why = pcall(onError, key, message, stack)
         if not ok then
             -- The addon's log failed: both are kept here rather than lost.
             keep(recorded, stack)
-            keep("onError: " .. tostring(why))
+            keep("onError: " .. safeText(why))
             return
         end
     end
@@ -423,7 +461,7 @@ local function partDone(key, what, ok, result)
     local id = tostring(key) .. ": " .. tostring(what)
     if not leftOut[id] then
         leftOut[id] = true
-        Note(key, false, tostring(what) .. " left out: " .. tostring(result))
+        Note(key, false, tostring(what) .. " left out: " .. safeText(result))
     end
     return nil
 end
@@ -489,9 +527,10 @@ end)
 
 local function failed(event, why, quiet)
     if not failedEvents[event] then
-        failedEvents[event] = tostring(why)
+        local text = safeText(why)
+        failedEvents[event] = text
         if not quiet then
-            report("On " .. tostring(event), "could not register " .. tostring(event) .. ": " .. tostring(why), nil, nil)
+            report("On " .. tostring(event), "could not register " .. tostring(event) .. ": " .. text, nil, nil)
         end
     end
     return false

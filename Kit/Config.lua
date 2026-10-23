@@ -1,4 +1,4 @@
--- gkit Config.lua @ f0ef885: edit gkit, not this copy
+-- gkit Config.lua @ 3b70925: edit gkit, not this copy
 -- Config.lua -- settings: defaults, what was saved, validated, into one live set.
 --
 --   ns.kit.config.defaults  ->  <ns.kit.db>.settings (SavedVariables), the values that differ only
@@ -18,6 +18,13 @@
 --                loading or saving happens here. Otherwise the settings live in <db>.settings
 --   saved        function returning the table Set writes to, instead of <db>.settings (a profile
 --                layer's hook, below). With it set, ADDON_LOADED leaves the save to the layer
+--   validators   0.3.0. { key = function(value) return clean, droppedCount end }: settings the addon
+--                checks whole, such as a list of tabs or a map of colors (gChat's). The function
+--                gets a value of the default's type that has passed the checks above, and returns
+--                the value cleaned (a table of its own; it leaves the one handed in as it was), or
+--                nil to refuse it, and how many of its parts it had to drop (0 or nil: none). A
+--                cleaned value of another type than the default's counts as a refusal, and so does
+--                a validator that throws (its error recorded, keyed "Config <key>")
 -- The fields are read when the settings are first used, so an addon may fill ns.kit.config in its
 -- own files (its defaults file), after the kit has loaded.
 --
@@ -33,15 +40,23 @@
 --                        as at load, no listener told, nothing counted, and the reload keys'
 --                        values become what PendingReload measures against
 --   Loading()            true while Apply runs
---   Valid(key, value) -> ok, why        the default's type, within limits, on the list, a colour
+--   Valid(key, value) -> ok, why        the default's type, within limits, on the list, a colour;
+--                                       and where the setting has a validator, one that does not
+--                                       refuse it (a value it had to trim is still valid)
 --   ValidEntry(key, k, v) -> ok         an entry of a table setting: the default entry's shape, a
 --                                       colour where the default entry is one
+--   Prune(stored) -> kept, dropped      0.3.0. what ADDON_LOADED does to <db>.settings, for a layer
+--                                       that prunes each stored profile itself: the values this
+--                                       version can use, in a new table (stored's own values, or
+--                                       what a validator returned; not copies), and the names of
+--                                       the rest, sorted. Pure: stored, the save and dropped are
+--                                       left as they are
 --   IsColourKey(key)
 --   dropped, reloadChanges              saved values refused at load (names, sorted); a count of
 --                                       changes to reload keys
 -- and ns.dbLoaded, whether the client handed back a save this session.
 --
--- Rules kept from the lineage (gBars' GB2-H1, gFrames' resolve, gBars' validation): a saved false
+-- Rules kept from the lineage (gBars' saved-false fix and validation, gFrames' resolve): a saved false
 -- loads as false (no `a and b or c` anywhere); each saved value is checked on its own and an
 -- unusable one is dropped and named; only values that differ from their defaults are saved, so a
 -- later change to a default reaches everyone who never touched that setting. A table setting (a
@@ -49,12 +64,21 @@
 -- entry without the default entry's shape keeps the default one; a colour is checked whole, so a
 -- partial one is replaced whole.
 --
+-- A setting with a validator (0.3.0) is never merged: a merge keeps only the default's entries, so
+-- a list of four tabs would load as the default's two, and a map whose default is empty would load
+-- empty, as gChat's tabs once did. Its saved value loads as the validator cleaned it, or as the
+-- default when the validator refuses it. Set takes only a value the validator keeps whole (one it
+-- had to trim is refused, as gChat's own Set refuses it), and stores and compares what the validator
+-- returned. The prune keeps the cleaned value, names a refused one as any other ("key"), and names
+-- a trimmed one "key (n dropped)". ValidEntry, the merge's check, does not look at validators: a
+-- layer prunes with Prune, which does. Settings without a validator behave exactly as before.
+--
 -- Profiles are not here; a profile layer sits on top (gFrames' Config/Config.lua). It points
 -- ns.kit.config.saved at the profile in use (a table of values that differ), so Set and Reset
 -- write there; at ADDON_LOADED this file then records ns.dbLoaded and touches nothing else, since
--- the layer carries over and prunes each stored profile itself (with Valid/ValidEntry, as this file
--- prunes <db>.settings); the layer loads the profile in use with Config.Load and switches with
--- Config.Apply, which notifies every listener of a setting that changed.
+-- the layer carries over and prunes each stored profile itself (with Prune, or Valid/ValidEntry,
+-- as this file prunes <db>.settings); the layer loads the profile in use with Config.Load and
+-- switches with Config.Apply, which notifies every listener of a setting that changed.
 --
 -- Client facts (gkit's facts/forever-client-facts.md): saved globals are assigned after the files
 -- run and before ADDON_LOADED (CF-073), so the save is read there and the global is read at call
@@ -69,7 +93,7 @@ end
 local Init = Kit.Init
 
 local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
-local tsort, huge = table.sort, math.huge
+local tsort, huge, ceil = table.sort, math.huge, math.ceil
 
 local Config = {}
 Kit.Config = Config
@@ -85,7 +109,7 @@ local atLoad = {}         -- the reload keys' values this session started with
 local loading = false
 
 local built = false
-local spec, defaults, limits, choices, colourKeys, reloadKeys, form
+local spec, defaults, limits, choices, colourKeys, reloadKeys, form, validators
 
 local HEX = "^%x%x%x%x%x%x$"
 
@@ -166,6 +190,15 @@ local function build()
     colourKeys = spec.colourKeys
     reloadKeys = spec.reloadKeys or {}
     form = spec.colours or "rgb"
+    validators = spec.validators or {}
+    if type(validators) ~= "table" then
+        error("gkit Config: ns.kit.config.validators is a table of functions", 3)
+    end
+    for key, fn in pairs(validators) do
+        if type(fn) ~= "function" then
+            error("gkit Config: ns.kit.config.validators." .. tostring(key) .. " is not a function", 3)
+        end
+    end
     built = true
     load({})
 end
@@ -182,8 +215,39 @@ local function cannot(key, value)
     return false, ("%s cannot be %s"):format(tostring(key), tostring(value))
 end
 
-function Config.Valid(key, value)
-    if not built then build() end
+local function notValid(key)
+    return false, ("%s is not valid"):format(tostring(key))
+end
+
+-- How many parts a validator said it dropped, as a whole number: 0 for none, nil or anything but
+-- a positive number.
+local function dropCount(n)
+    if type(n) ~= "number" or not (n > 0) then
+        return 0
+    end
+    if n >= 2147483647 then
+        return 2147483647
+    end
+    return ceil(n)
+end
+
+-- The last of the checks: true, nil, the value and 0 for a setting without a validator; for one
+-- with, what its validator made of the value (guarded: a validator that throws refuses it).
+local function validated(key, value)
+    local validator = validators[key]
+    if validator == nil then
+        return true, nil, value, 0
+    end
+    local ran, clean, dropped = Init.Run("Config " .. tostring(key), validator, value)
+    if not ran or clean == nil or type(clean) ~= type(defaults[key]) then
+        return notValid(key)
+    end
+    return true, nil, clean, dropCount(dropped)
+end
+
+-- ok, why, then for a usable value the value to keep (a validator's cleaned one) and how many parts
+-- the validator dropped. Without a validator, what Valid always answered.
+local function check(key, value)
     local default = defaults[key]
     if default == nil then
         return false, "no such setting: " .. tostring(key)
@@ -193,7 +257,7 @@ function Config.Valid(key, value)
     end
     if Config.IsColourKey(key) then
         if isColourValue(value) then
-            return true
+            return validated(key, value)
         end
         return cannot(key, value)
     end
@@ -201,7 +265,7 @@ function Config.Valid(key, value)
         local range = limits[key]
         if range then
             if value >= range[1] and value <= range[2] then
-                return true
+                return validated(key, value)
             end
             return cannot(key, value)
         end
@@ -212,14 +276,23 @@ function Config.Valid(key, value)
     end
     local list = choices[key]
     if not list then
-        return true
+        return validated(key, value)
     end
     for _, choice in ipairs(list) do
         if choice == value then
-            return true
+            return validated(key, value)
         end
     end
     return cannot(key, value)
+end
+
+function Config.Valid(key, value)
+    if not built then build() end
+    local ok, why = check(key, value)
+    if ok then
+        return true
+    end
+    return false, why
 end
 
 function Config.ValidEntry(key, entryKey, value)
@@ -238,14 +311,15 @@ function Config.ValidEntry(key, entryKey, value)
     return shaped(value, entry)
 end
 
--- A table setting that is not one colour: merged entry by entry.
+-- A table setting that is not one colour and has no validator: merged entry by entry.
 local function mergedKey(key)
-    return type(defaults[key]) == "table" and not Config.IsColourKey(key)
+    return type(defaults[key]) == "table" and validators[key] == nil and not Config.IsColourKey(key)
 end
 
 local function resolve(key, stored)
     local default = defaults[key]
-    if not Config.Valid(key, stored) then
+    local ok, _, clean = check(key, stored)
+    if not ok then
         return copy(default)
     end
     if mergedKey(key) then
@@ -257,11 +331,11 @@ local function resolve(key, stored)
         end
         return merged
     end
-    return copy(stored)
+    return copy(clean)
 end
 
 -- Not `Valid(key, value) and copy(value) or copy(default)`: that loads the default when the value
--- is false, so every unticked check box came back ticked (gBars, GB2-H1).
+-- is false, so every unticked check box came back ticked (in gBars).
 function load(stored)
     for key in pairs(defaults) do
         live[key] = resolve(key, stored[key])
@@ -325,13 +399,18 @@ function Config.Loading()
 end
 
 -- Not `differs and value or nil` for the save: that saves nothing when the value is false, which
--- is every unticked check box.
+-- is every unticked check box. A setting with a validator takes only a value the validator kept
+-- whole, and what is stored and compared is the value it returned.
 function Config.Set(key, value)
     if not built then build() end
-    local ok, why = Config.Valid(key, value)
+    local ok, why, clean, dropped = check(key, value)
     if not ok then
         return false, why
     end
+    if dropped > 0 then
+        return notValid(key)
+    end
+    value = clean
     if equal(live[key], value) then
         return true
     end
@@ -454,31 +533,51 @@ function Config.Changed()
 end
 
 -- The saved values this version can use, and the names of those it cannot: an unknown key, a key
--- that is not a string, a value of the wrong type, past its limits, off its list or not a colour,
--- and in a table setting an entry the merge would skip ("key.entry").
+-- that is not a string, a value of the wrong type, past its limits, off its list, not a colour or
+-- refused by its validator, and in a table setting an entry the merge would skip ("key.entry").
+-- A setting with a validator keeps the value it cleaned, named "key (n dropped)" when that took
+-- parts out.
 local function prune(stored)
     local kept, dropped = {}, {}
     for key, value in pairs(stored) do
-        if type(key) == "string" and Config.Valid(key, value) then
-            if mergedKey(key) then
-                local entries = {}
-                for k, v in pairs(value) do
-                    if Config.ValidEntry(key, k, v) then
-                        entries[k] = v
-                    else
-                        dropped[#dropped + 1] = key .. "." .. tostring(k)
-                    end
-                end
-                kept[key] = entries
-            else
-                kept[key] = value
-            end
-        else
+        local ok, clean, n = false, nil, 0
+        if type(key) == "string" then
+            local _
+            ok, _, clean, n = check(key, value)
+        end
+        if not ok then
             dropped[#dropped + 1] = tostring(key)
+        elseif validators[key] ~= nil then
+            kept[key] = clean
+            if n > 0 then
+                dropped[#dropped + 1] = ("%s (%d dropped)"):format(key, n)
+            end
+        elseif mergedKey(key) then
+            local entries = {}
+            for k, v in pairs(value) do
+                if Config.ValidEntry(key, k, v) then
+                    entries[k] = v
+                else
+                    dropped[#dropped + 1] = key .. "." .. tostring(k)
+                end
+            end
+            kept[key] = entries
+        else
+            kept[key] = value
         end
     end
     tsort(dropped)
     return kept, dropped
+end
+
+-- 0.3.0. The prune above for a profile layer, which prunes each stored profile itself (gFrames'
+-- and gChat's): nothing here is changed by it, the stored set included.
+function Config.Prune(stored)
+    if not built then build() end
+    if type(stored) ~= "table" then
+        return {}, {}
+    end
+    return prune(stored)
 end
 
 -- SavedVariables are assigned just before this addon's ADDON_LOADED (CF-073). The settings this
