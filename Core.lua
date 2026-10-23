@@ -220,8 +220,8 @@ local function OnAddonLoaded(_, name)
     end)
     -- Every player power change lands here, energy ticks included, as in Blizzard's own
     -- ComboFrame. The event's powerType could skip all but combo points, but its token on
-    -- this client is unverified (GR-L2, probe Q17 in forever-addons/OPEN-CLIENT-PROBES.md),
-    -- and a wrong one would stop the bar updating at all.
+    -- this client is unverified (gkit CF-059), and a wrong one would stop the bar updating at
+    -- all.
     On("UNIT_POWER_FREQUENT", function()
         ns:UpdatePoints()
     end, "player")

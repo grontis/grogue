@@ -402,7 +402,7 @@ orientation.items[1]:Click()
 check(db.orientation == "HORIZONTAL", "and back to Horizontal")
 check(control("Smooth fill") ~= nil, "smooth fill is on offer")
 -- A slider runs from end to end of its setting's limits, and a dropdown offers exactly its
--- setting's list: what a save is held to (GR-M2).
+-- setting's list: what a save is held to.
 local spans = true
 for label, spec in pairs({
     ["Point width"] = { "pipWidth", 1 }, ["Point height"] = { "pipHeight", 1 }, Spacing = { "spacing", 1 },
@@ -480,7 +480,7 @@ noErrors("no errors in /grogue")
 
 ------------------------------------------------------------------------------ drag errors
 -- An error in a script on our own frames goes to the client's error frame, which is off by
--- default, so the drag handlers print theirs like every other handler (GR-L5).
+-- default, so the drag handlers print theirs like every other handler.
 print("== an error while dragging")
 local function contained(fn, frame, message)
     H.failNext(fn == frame._OnDragStart and "StartMoving" or "StopMovingOrSizing", message)
@@ -542,7 +542,7 @@ inCombat = false
 noErrors("no errors reloading in combat")
 
 ------------------------------------------------------------------------------ vehicles
--- In a vehicle the player's own combo points don't apply, so the bar hides (GR-L4).
+-- In a vehicle the player's own combo points don't apply, so the bar hides.
 print("== a reload in a vehicle")
 inVehicle = true
 gRogueDB = { hideWithoutTarget = false, hideOutOfCombat = false }
@@ -578,7 +578,7 @@ comboPoints = 0
 ------------------------------------------------------------------------------ a broken save
 -- A saved value of the wrong type, past its slider's range, off its list, or a colour
 -- without numeric r, g and b goes back to its default at load, so one bad value can't
--- break every layout refresh (GR-M2).
+-- break every layout refresh.
 print("== a save with values this version can't use")
 local NAN, INF = 0 / 0, 1 / 0
 gRogueDB = {
@@ -640,7 +640,7 @@ noErrors("no errors")
 ------------------------------------------------------------------------------ no interpolation
 -- SetValue's interpolation can't be nil, so a client without the enum, or without either
 -- member, must get a bar that snaps with the count as SetValue's only argument, and no
--- smooth fill check, rather than an error at every update with smooth fill on (GR-M1).
+-- smooth fill check, rather than an error at every update with smooth fill on.
 local Interpolation = Enum.StatusBarInterpolation
 local clients = {
     { "a client without StatusBarInterpolation", nil },
@@ -669,7 +669,7 @@ comboPoints = 0
 
 ------------------------------------------------------------------------------ no GetComboPoints
 -- A build without GetComboPoints reads the player's combo point power instead, which lags
--- a target change, rather than raising at every update (GR-L1).
+-- a target change, rather than raising at every update.
 print("== a client without GetComboPoints")
 local GetComboPointsStub = GetComboPoints
 GetComboPoints = nil
